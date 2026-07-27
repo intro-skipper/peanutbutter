@@ -39,6 +39,7 @@ public sealed partial class PluginInstallerController : ControllerBase
     /// Installs or updates a plugin from a ZIP file.
     /// </summary>
     /// <param name="file">The plugin ZIP or DLL sent as the multipart form field named <c>file</c>.</param>
+    /// <param name="confirmOlderVersion">Whether an explicitly requested downgrade may proceed.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The installation result.</returns>
     [HttpPost("Install")]
