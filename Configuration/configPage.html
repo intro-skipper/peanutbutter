@@ -11,19 +11,19 @@
                 <header class="peanutButterHero">
                     <div class="peanutButterEyebrow">Peanut Butter</div>
                     <h1>Plugin Installer</h1>
-                    <p class="peanutButterLead">Install or update Jellyfin plugins from a ZIP archive or managed DLL.</p>
+                    <p class="peanutButterLead">Install or update Jellyfin plugins from a ZIP archive, managed DLL, or HTTPS URL.</p>
                 </header>
 
                 <section class="peanutButterCard" aria-labelledby="PeanutButterInstallHeading">
                     <div class="peanutButterCardHeader">
                         <div>
-                            <h2 id="PeanutButterInstallHeading">Choose a plugin file</h2>
-                            <p>Drop a file below or browse your device to get started.</p>
+                            <h2 id="PeanutButterInstallHeading">Choose a plugin source</h2>
+                            <p>Upload a local file or provide a download URL.</p>
                         </div>
                         <span class="peanutButterAdminBadge">Administrator only</span>
                     </div>
 
-                    <form id="PeanutButterForm" enctype="multipart/form-data">
+                    <form id="PeanutButterForm" enctype="multipart/form-data" novalidate>
                         <label id="PluginDropZone" class="pluginDropZone" role="button" tabindex="0" aria-controls="PluginFile" aria-label="Choose a plugin ZIP or DLL">
                             <input id="PluginFile" name="file" type="file" accept=".zip,.dll,application/zip,application/octet-stream" required>
                             <span class="pluginDropZoneIcon" aria-hidden="true">↑</span>
@@ -31,6 +31,13 @@
                             <span class="pluginDropZoneHint">or click to browse for a ZIP or DLL</span>
                             <span id="PluginFileName" class="pluginDropZoneFileName" data-empty="true">No file selected</span>
                         </label>
+
+                        <div class="peanutButterUrlDivider"><span>or install from a URL</span></div>
+                        <label class="peanutButterUrlField" for="PluginUrl">
+                            <span>Plugin URL</span>
+                            <input id="PluginUrl" name="url" type="url" inputmode="url" autocomplete="url" placeholder="https://example.com/plugin.zip">
+                        </label>
+                        <p class="peanutButterUrlHint">Use a direct HTTPS download link or a public GitHub Actions artifact page.</p>
 
                         <div class="peanutButterFileTypes" aria-label="Supported file types">
                             <span>ZIP archives</span>
@@ -260,6 +267,56 @@
                 flex-wrap: wrap;
                 gap: .5rem;
                 margin-bottom: 1.25rem;
+            }
+
+            .peanutButterUrlDivider {
+                align-items: center;
+                display: flex;
+                gap: .75rem;
+                margin: 1.25rem 0;
+                opacity: .6;
+            }
+
+            .peanutButterUrlDivider::before,
+            .peanutButterUrlDivider::after {
+                background: rgba(255, 255, 255, .16);
+                content: "";
+                flex: 1;
+                height: 1px;
+            }
+
+            .peanutButterUrlField {
+                display: block;
+            }
+
+            .peanutButterUrlField > span {
+                display: block;
+                font-size: .9rem;
+                font-weight: 600;
+                margin-bottom: .45rem;
+            }
+
+            .peanutButterUrlField input {
+                background: rgba(0, 0, 0, .18);
+                border: 1px solid rgba(255, 255, 255, .2);
+                border-radius: .4rem;
+                box-sizing: border-box;
+                color: inherit;
+                font: inherit;
+                padding: .75rem .85rem;
+                width: 100%;
+            }
+
+            .peanutButterUrlField input:focus {
+                border-color: var(--theme-primary-color);
+                box-shadow: 0 0 0 2px rgba(255, 255, 255, .12);
+                outline: none;
+            }
+
+            .peanutButterUrlHint {
+                font-size: .8rem;
+                margin: .45rem 0 1rem;
+                opacity: .6;
             }
 
             .peanutButterFileTypes span {
@@ -497,6 +554,7 @@
                 var form = document.querySelector('#PeanutButterForm');
                 var dropZone = document.querySelector('#PluginDropZone');
                 var fileInput = document.querySelector('#PluginFile');
+                var urlInput = document.querySelector('#PluginUrl');
                 var fileName = document.querySelector('#PluginFileName');
                 var submitButton = document.querySelector('#PeanutButterSubmit');
                 var result = document.querySelector('#PeanutButterResult');
@@ -598,12 +656,23 @@
                     setResult('');
                     setConfirmation('', false);
                     fileInput.value = '';
+                    urlInput.value = '';
                     showFileName();
                 });
 
                 fileInput.addEventListener('change', function () {
                     setConfirmation('', false);
+                    if (fileInput.files.length) {
+                        urlInput.value = '';
+                    }
                     showFileName();
+                });
+                urlInput.addEventListener('input', function () {
+                    setConfirmation('', false);
+                    if (urlInput.value.trim()) {
+                        fileInput.value = '';
+                        showFileName();
+                    }
                 });
                 dropZone.addEventListener('click', function (event) {
                     if (event.target !== fileInput) {
@@ -634,23 +703,35 @@
                 dropZone.addEventListener('drop', function (event) {
                     if (event.dataTransfer.files.length) {
                         setConfirmation('', false);
+                        urlInput.value = '';
                         fileInput.files = event.dataTransfer.files;
                         showFileName();
                     }
                 });
 
                 function installPlugin(confirmOlderVersion) {
-                    if (!fileInput.files.length) {
-                        setResult('Choose a ZIP or DLL file first.', 'error');
+                    var sourceUrl = urlInput.value.trim();
+                    var hasFile = fileInput.files.length > 0;
+                    if (!hasFile && !sourceUrl) {
+                        setResult('Choose a ZIP or DLL file, or enter a plugin URL.', 'error');
+                        return;
+                    }
+
+                    if (hasFile && sourceUrl) {
+                        setResult('Choose either a file or a URL, not both.', 'error');
                         return;
                     }
 
                     var data = new FormData();
-                    data.append('file', fileInput.files[0]);
+                    if (sourceUrl) {
+                        data.append('url', sourceUrl);
+                    } else {
+                        data.append('file', fileInput.files[0]);
+                    }
                     submitButton.disabled = true;
                     dropZone.classList.add('pluginDropZoneBusy');
                     Dashboard.showLoadingMsg();
-                    setResult('Installing plugin...', 'pending');
+                    setResult(sourceUrl ? 'Downloading and installing plugin...' : 'Installing plugin...', 'pending');
 
                     var installUrl = ApiClient.getUrl('Plugins/PeanutButter/Install');
                     if (confirmOlderVersion) {
@@ -704,6 +785,7 @@
                         setResult(action + ' ' + name + ' ' + version + '. The files are on disk; restart Jellyfin to load the replacement.', 'success');
                         setConfirmation('', false);
                         fileInput.value = '';
+                        urlInput.value = '';
                         showFileName();
                     }).catch(function (error) {
                         if (error && error.requiresConfirmation) {
