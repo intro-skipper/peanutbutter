@@ -524,7 +524,7 @@ public sealed partial class PluginZipInstaller
                 }
                 catch (JsonException)
                 {
-                    LogMalformedMetadata(logger, metadataPath);
+                    LogMalformedMetadata(_logger, metadataPath);
                 }
             }
 
@@ -590,7 +590,7 @@ public sealed partial class PluginZipInstaller
 
     private static string FindCommonRootPrefix(string[] paths)
     {
-        if (paths.Count == 0)
+        if (paths.Length == 0)
         {
             return string.Empty;
         }
