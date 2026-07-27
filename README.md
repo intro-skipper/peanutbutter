@@ -17,7 +17,7 @@ curl.exe -X POST `
   https://jellyfin.example.com/Plugins/PeanutButter/Install
 ```
 
-Archives should be standard Jellyfin plugin packages containing at least one DLL and, preferably, `meta.json`. One-off ZIPs containing a DLL are also accepted. Standalone DLL uploads are verified as managed assemblies containing a public concrete type implementing Jellyfin's `IPlugin` interface, and all assembly types must load successfully for the current Jellyfin version before installation. This is a structural compatibility check, not a malware scanner or a replacement for trusting the plugin source.
+Archives should be standard Jellyfin plugin packages containing at least one DLL and, preferably, `meta.json`. One-off ZIPs containing a DLL are also accepted. When updating an officially installed plugin with a manifestless workflow artifact, Peanut Butter retains the installed manifest and missing supporting files while replacing the uploaded assembly. Standalone DLL uploads are verified as managed assemblies containing a public concrete type implementing Jellyfin's `IPlugin` interface, and all assembly types must load successfully for the current Jellyfin version before installation. This is a structural compatibility check, not a malware scanner or a replacement for trusting the plugin source.
 
 The plugin matches updates by the archive's `guid`; when metadata is missing it falls back to the plugin folder/name or DLL assembly name. ZIP paths are normalized and checked for traversal, archives are limited to 100 MB compressed and 500 MB uncompressed, and the endpoint requires Jellyfin's `RequiresElevation` policy.
 

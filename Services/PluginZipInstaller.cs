@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using MediaBrowser.Common.Plugins;
 using Microsoft.Extensions.Logging;
 
@@ -102,6 +103,7 @@ public sealed partial class PluginZipInstaller
 
             var archiveInfo = ReadArchiveInfo(extractedPath, _logger);
             var existingDirectory = FindExistingPlugin(archiveInfo);
+            PrepareManifestlessUpdate(extractedPath, existingDirectory?.FullPath, archiveInfo);
             targetPath = existingDirectory?.FullPath
                 ?? Path.Combine(_pluginsPath, archiveInfo.FolderName);
 
@@ -261,6 +263,7 @@ public sealed partial class PluginZipInstaller
             }
 
             var existingDirectory = FindExistingPlugin(archiveInfo);
+            PrepareManifestlessUpdate(extractedPath, existingDirectory?.FullPath, archiveInfo);
             targetPath = existingDirectory?.FullPath
                 ?? Path.Combine(_pluginsPath, archiveInfo.FolderName);
             EnsureSafePluginPath(targetPath);
@@ -557,10 +560,7 @@ public sealed partial class PluginZipInstaller
             }
 
             if (Directory.EnumerateFiles(directory, "*.dll", SearchOption.TopDirectoryOnly)
-                .Any(path => string.Equals(
-                    Path.GetFileNameWithoutExtension(path),
-                    archiveInfo.AssemblyName,
-                    StringComparison.OrdinalIgnoreCase)))
+                .Any(path => IsAssemblyMatch(path, archiveInfo.AssemblyName)))
             {
                 matched = true;
             }
@@ -588,6 +588,121 @@ public sealed partial class PluginZipInstaller
             && Version.TryParse(directoryName[(separator + 1)..], out var parsedDirectoryVersion)
             ? parsedDirectoryVersion
             : new Version(0, 0, 0, 0);
+    }
+
+    private static bool IsAssemblyMatch(string path, string assemblyName)
+    {
+        if (string.Equals(
+                Path.GetFileNameWithoutExtension(path),
+                assemblyName,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        try
+        {
+            return string.Equals(
+                AssemblyName.GetAssemblyName(path).Name,
+                assemblyName,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception exception) when (exception is BadImageFormatException or IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static void PrepareManifestlessUpdate(
+        string extractedPath,
+        string? existingPath,
+        PluginArchiveInfo archiveInfo)
+    {
+        if (existingPath is null
+            || Directory.EnumerateFiles(extractedPath, "meta.json", SearchOption.AllDirectories).Any())
+        {
+            return;
+        }
+
+        var existingMetadataPath = Path.Combine(existingPath, "meta.json");
+        var destinationMetadataPath = Path.Combine(extractedPath, "meta.json");
+        if (File.Exists(existingMetadataPath))
+        {
+            try
+            {
+                var metadata = JsonNode.Parse(File.ReadAllBytes(existingMetadataPath));
+                if (metadata is JsonObject metadataObject)
+                {
+                    // A raw workflow artifact has no manifest. Keep the official install's
+                    // identity/ABI/assembly metadata, but make the manifest describe the
+                    // assembly being uploaded so Jellyfin does not discard the replacement.
+                    metadataObject["version"] = archiveInfo.Version;
+                    if (metadataObject["assemblies"] is not JsonArray assemblies)
+                    {
+                        assemblies = new JsonArray();
+                        metadataObject["assemblies"] = assemblies;
+                    }
+
+                    if (!assemblies.Any(node => node is JsonValue value
+                        && value.TryGetValue<string>(out var assemblyFileName)
+                        && string.Equals(
+                            assemblyFileName,
+                            archiveInfo.AssemblyFileName,
+                            StringComparison.OrdinalIgnoreCase)))
+                    {
+                        assemblies.Add(archiveInfo.AssemblyFileName);
+                    }
+
+                    File.WriteAllText(
+                        destinationMetadataPath,
+                        metadataObject.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+                }
+                else
+                {
+                    File.Copy(existingMetadataPath, destinationMetadataPath, overwrite: false);
+                }
+            }
+            catch (JsonException)
+            {
+                // Preserve the original file below. ReadArchiveInfo already validates any
+                // metadata supplied by the new archive; this is only a compatibility fallback.
+                File.Copy(existingMetadataPath, destinationMetadataPath, overwrite: false);
+            }
+        }
+
+        // Build workflow artifacts commonly contain only the plugin DLL. Keep the
+        // dependencies/resources from the official installation in that case; a complete
+        // package with its own meta.json is still a full replacement.
+        foreach (var existingFile in Directory.EnumerateFiles(existingPath, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = Path.GetRelativePath(existingPath, existingFile);
+            if ((File.GetAttributes(existingFile) & FileAttributes.ReparsePoint) != 0
+                || Path.GetFileName(existingFile).Equals(
+                    archiveInfo.AssemblyFileName,
+                    StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileNameWithoutExtension(existingFile).Equals(
+                    archiveInfo.AssemblyName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var destinationPath = Path.GetFullPath(Path.Combine(extractedPath, relativePath));
+            EnsureWithinDirectory(extractedPath, destinationPath);
+            if (File.Exists(destinationPath))
+            {
+                continue;
+            }
+
+            var destinationDirectory = Path.GetDirectoryName(destinationPath);
+            if (destinationDirectory is null)
+            {
+                continue;
+            }
+
+            Directory.CreateDirectory(destinationDirectory);
+            File.Copy(existingFile, destinationPath);
+        }
     }
 
     private void EnsureSafePluginPath(string path)
