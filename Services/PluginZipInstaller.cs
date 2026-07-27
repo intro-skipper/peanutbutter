@@ -10,7 +10,7 @@ namespace Jellyfin.Plugin.PeanutButter.Services;
 /// <summary>
 /// Safely stages and installs a Jellyfin plugin archive.
 /// </summary>
-public sealed class PluginZipInstaller
+public sealed partial class PluginZipInstaller
 {
     /// <summary>
     /// Maximum accepted upload size. Plugin packages are normally only a few megabytes;
@@ -99,7 +99,7 @@ public sealed class PluginZipInstaller
             Directory.CreateDirectory(extractedPath);
             await ExtractArchiveAsync(uploadPath, extractedPath, cancellationToken).ConfigureAwait(false);
 
-            var archiveInfo = ReadArchiveInfo(extractedPath);
+            var archiveInfo = ReadArchiveInfo(extractedPath, _logger);
             var existingDirectory = FindExistingPlugin(archiveInfo);
             targetPath = existingDirectory?.FullPath
                 ?? Path.Combine(_pluginsPath, archiveInfo.FolderName);
@@ -127,8 +127,8 @@ public sealed class PluginZipInstaller
                 Directory.Delete(movedExistingPath, recursive: true);
             }
 
-            _logger.LogInformation(
-                "{Action} Jellyfin plugin {PluginName} ({PluginId}) version {Version} in {PluginPath} from {ArchiveName}",
+            LogPluginInstalled(
+                _logger,
                 existingDirectory is null ? "Installed" : "Updated",
                 archiveInfo.Name,
                 archiveInfo.PluginId,
@@ -156,7 +156,7 @@ public sealed class PluginZipInstaller
         }
         catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException or JsonException)
         {
-            _logger.LogError(exception, "Unable to install the uploaded Jellyfin plugin archive {ArchiveName}", fileName);
+            LogArchiveInstallError(_logger, exception, fileName);
             throw new PluginArchiveException(
                 "The plugin could not be installed. Check the Jellyfin log for the underlying file-system error.",
                 exception);
@@ -176,11 +176,7 @@ public sealed class PluginZipInstaller
                 }
                 catch (Exception rollbackException) when (rollbackException is IOException or UnauthorizedAccessException)
                 {
-                    _logger.LogCritical(
-                        rollbackException,
-                        "Unable to roll back plugin update for {PluginPath}; the previous plugin is staged at {BackupPath}",
-                        targetPath,
-                        movedExistingPath);
+                    LogPluginRollbackFailure(_logger, rollbackException, targetPath, movedExistingPath);
                 }
             }
 
@@ -277,8 +273,9 @@ public sealed class PluginZipInstaller
                 Directory.Delete(movedExistingPath, recursive: true);
             }
 
-            _logger.LogInformation(
-                "Installed standalone Jellyfin plugin {PluginName} version {Version} in {PluginPath} from {ArchiveName}",
+            LogStandalonePluginInstalled(
+                _logger,
+                existingDirectory is null ? "Installed" : "Updated",
                 archiveInfo.Name,
                 archiveInfo.Version,
                 targetPath,
@@ -308,7 +305,7 @@ public sealed class PluginZipInstaller
             or UnauthorizedAccessException
             or ReflectionTypeLoadException)
         {
-            _logger.LogError(exception, "Unable to install the uploaded Jellyfin plugin DLL {FileName}", fileName);
+            LogDllInstallError(_logger, exception, fileName);
             throw new PluginArchiveException(
                 "The DLL could not be installed. Check that it is a valid Jellyfin plugin and review the Jellyfin log.",
                 exception);
@@ -328,11 +325,7 @@ public sealed class PluginZipInstaller
                 }
                 catch (Exception rollbackException) when (rollbackException is IOException or UnauthorizedAccessException)
                 {
-                    _logger.LogCritical(
-                        rollbackException,
-                        "Unable to roll back standalone plugin update for {PluginPath}; the previous plugin is staged at {BackupPath}",
-                        targetPath,
-                        movedExistingPath);
+                    LogDllRollbackFailure(_logger, rollbackException, targetPath, movedExistingPath);
                 }
             }
 
@@ -340,7 +333,7 @@ public sealed class PluginZipInstaller
         }
     }
 
-    private async Task ExtractArchiveAsync(
+    private static async Task ExtractArchiveAsync(
         string archivePath,
         string destinationPath,
         CancellationToken cancellationToken)
@@ -417,7 +410,9 @@ public sealed class PluginZipInstaller
         }
     }
 
-    private PluginArchiveInfo ReadArchiveInfo(string extractedPath)
+    private static PluginArchiveInfo ReadArchiveInfo(
+        string extractedPath,
+        ILogger logger)
     {
         var metadataPath = Directory.EnumerateFiles(extractedPath, "meta.json", SearchOption.AllDirectories)
             .FirstOrDefault(path => string.Equals(Path.GetFileName(path), "meta.json", StringComparison.OrdinalIgnoreCase));
@@ -502,7 +497,7 @@ public sealed class PluginZipInstaller
         foreach (var directory in Directory.EnumerateDirectories(_pluginsPath))
         {
             var directoryName = Path.GetFileName(directory);
-            if (directoryName.StartsWith(".", StringComparison.Ordinal)
+            if (directoryName.StartsWith('.')
                 || IsReparsePoint(directory))
             {
                 continue;
@@ -529,7 +524,7 @@ public sealed class PluginZipInstaller
                 }
                 catch (JsonException)
                 {
-                    _logger.LogWarning("Ignoring malformed plugin metadata at {MetadataPath}", metadataPath);
+                    LogMalformedMetadata(logger, metadataPath);
                 }
             }
 
@@ -577,7 +572,7 @@ public sealed class PluginZipInstaller
     {
         var normalized = path.Replace('\\', '/');
         if (string.IsNullOrWhiteSpace(normalized)
-            || normalized.StartsWith('/', StringComparison.Ordinal)
+            || normalized.StartsWith('/')
             || normalized.Contains(':')
             || normalized.Contains('\0'))
         {
@@ -593,7 +588,7 @@ public sealed class PluginZipInstaller
         return string.Join('/', segments);
     }
 
-    private static string FindCommonRootPrefix(IReadOnlyList<string> paths)
+    private static string FindCommonRootPrefix(string[] paths)
     {
         if (paths.Count == 0)
         {
@@ -614,7 +609,7 @@ public sealed class PluginZipInstaller
     }
 
     private static bool IsDirectory(ZipArchiveEntry entry)
-        => entry.FullName.EndsWith('/', StringComparison.Ordinal)
+        => entry.FullName.EndsWith('/')
             || entry.Name.Length == 0;
 
     private static bool IsReparsePoint(string path)
@@ -718,7 +713,7 @@ public sealed class PluginZipInstaller
         }
         catch (IOException exception)
         {
-            _logger.LogWarning(exception, "Unable to remove temporary file {TemporaryPath}", path);
+            LogTemporaryFileDeleteFailure(_logger, exception, path);
         }
     }
 
@@ -733,7 +728,7 @@ public sealed class PluginZipInstaller
         }
         catch (IOException exception)
         {
-            _logger.LogWarning(exception, "Unable to remove temporary directory {TemporaryPath}", path);
+            LogTemporaryDirectoryDeleteFailure(_logger, exception, path);
         }
     }
 
@@ -782,6 +777,46 @@ public sealed class PluginZipInstaller
             Unload();
         }
     }
+
+    [LoggerMessage(EventId = 1000, Level = LogLevel.Information, Message = "{Action} Jellyfin plugin {PluginName} ({PluginId}) version {Version} in {PluginPath} from {ArchiveName}")]
+    private static partial void LogPluginInstalled(
+        ILogger logger,
+        string action,
+        string pluginName,
+        Guid? pluginId,
+        string version,
+        string pluginPath,
+        string archiveName);
+
+    [LoggerMessage(EventId = 1001, Level = LogLevel.Error, Message = "Unable to install the uploaded Jellyfin plugin archive {ArchiveName}")]
+    private static partial void LogArchiveInstallError(ILogger logger, Exception exception, string? archiveName);
+
+    [LoggerMessage(EventId = 1002, Level = LogLevel.Critical, Message = "Unable to roll back plugin update for {PluginPath}; the previous plugin is staged at {BackupPath}")]
+    private static partial void LogPluginRollbackFailure(ILogger logger, Exception exception, string pluginPath, string backupPath);
+
+    [LoggerMessage(EventId = 1003, Level = LogLevel.Information, Message = "{Action} standalone Jellyfin plugin {PluginName} version {Version} in {PluginPath} from {ArchiveName}")]
+    private static partial void LogStandalonePluginInstalled(
+        ILogger logger,
+        string action,
+        string pluginName,
+        string version,
+        string pluginPath,
+        string archiveName);
+
+    [LoggerMessage(EventId = 1004, Level = LogLevel.Error, Message = "Unable to install the uploaded Jellyfin plugin DLL {FileName}")]
+    private static partial void LogDllInstallError(ILogger logger, Exception exception, string? fileName);
+
+    [LoggerMessage(EventId = 1005, Level = LogLevel.Critical, Message = "Unable to roll back standalone plugin update for {PluginPath}; the previous plugin is staged at {BackupPath}")]
+    private static partial void LogDllRollbackFailure(ILogger logger, Exception exception, string pluginPath, string backupPath);
+
+    [LoggerMessage(EventId = 1006, Level = LogLevel.Warning, Message = "Ignoring malformed plugin metadata at {MetadataPath}")]
+    private static partial void LogMalformedMetadata(ILogger logger, string metadataPath);
+
+    [LoggerMessage(EventId = 1007, Level = LogLevel.Warning, Message = "Unable to remove temporary file {TemporaryPath}")]
+    private static partial void LogTemporaryFileDeleteFailure(ILogger logger, Exception exception, string temporaryPath);
+
+    [LoggerMessage(EventId = 1008, Level = LogLevel.Warning, Message = "Unable to remove temporary directory {TemporaryPath}")]
+    private static partial void LogTemporaryDirectoryDeleteFailure(ILogger logger, Exception exception, string temporaryPath);
 }
 
 /// <summary>
