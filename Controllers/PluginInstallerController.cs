@@ -305,9 +305,9 @@ public sealed partial class PluginInstallerController : ControllerBase
     {
         try
         {
-            if (File.Exists(path))
+            if (System.IO.File.Exists(path))
             {
-                File.Delete(path);
+                System.IO.File.Delete(path);
             }
         }
         catch (IOException)
