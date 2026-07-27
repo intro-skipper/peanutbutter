@@ -146,6 +146,25 @@
                     return (error && (error.statusText || error.message)) || 'The server did not return an error message.';
                 }
 
+                function encodeAuthorizationValue(value) {
+                    value = value || '';
+                    try {
+                        value = decodeURIComponent(value);
+                    } catch (error) {
+                        // The value was not encoded.
+                    }
+
+                    return encodeURIComponent(value);
+                }
+
+                function getAuthorizationHeader() {
+                    return 'MediaBrowser Client="' + encodeAuthorizationValue(ApiClient.appName())
+                        + '", Device="' + encodeAuthorizationValue(ApiClient.deviceName())
+                        + '", DeviceId="' + encodeAuthorizationValue(ApiClient.deviceId())
+                        + '", Version="' + encodeAuthorizationValue(ApiClient.appVersion())
+                        + '", Token="' + encodeAuthorizationValue(ApiClient.accessToken()) + '"';
+                }
+
                 function showFileName() {
                     fileName.textContent = fileInput.files.length ? fileInput.files[0].name : '';
                 }
@@ -201,13 +220,20 @@
                     Dashboard.showLoadingMsg();
                     setResult('Installing plugin...', 'pending');
 
-                    ApiClient.ajax({
-                        type: 'POST',
-                        url: ApiClient.getUrl('Plugins/PeanutButter/Install'),
-                        data: data,
-                        processData: false,
-                        contentType: false,
-                        dataType: 'json'
+                    fetch(ApiClient.getUrl('Plugins/PeanutButter/Install'), {
+                        method: 'POST',
+                        headers: {
+                            Accept: 'application/json',
+                            Authorization: getAuthorizationHeader()
+                        },
+                        credentials: 'same-origin',
+                        body: data
+                    }).then(function (response) {
+                        if (!response.ok) {
+                            throw response;
+                        }
+
+                        return response.json();
                     }).then(function (response) {
                         var action = response.Action || response.action || 'Installed';
                         var name = response.Name || response.name || 'plugin';
