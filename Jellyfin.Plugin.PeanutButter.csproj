@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Jellyfin.Plugin.PeanutButter</RootNamespace>
     <AssemblyName>Jellyfin.Plugin.PeanutButter</AssemblyName>
     <Nullable>enable</Nullable>
@@ -10,10 +10,10 @@
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="Jellyfin.Controller" Version="10.11.10">
+    <PackageReference Include="Jellyfin.Controller" Version="12.0.0-rc3">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
-    <PackageReference Include="Jellyfin.Model" Version="10.11.10">
+    <PackageReference Include="Jellyfin.Model" Version="12.0.0-rc3">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
   </ItemGroup>

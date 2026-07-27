@@ -94,6 +94,28 @@
                 }
 
                 function getErrorMessage(error) {
+                    if (error && typeof error.clone === 'function' && typeof error.text === 'function') {
+                        return error.clone().text().then(function (text) {
+                            if (text && text.trim()) {
+                                return getErrorMessage({
+                                    responseText: text,
+                                    status: error.status,
+                                    statusText: error.statusText
+                                });
+                            }
+
+                            return getErrorMessage({
+                                status: error.status,
+                                statusText: error.statusText
+                            });
+                        }).catch(function () {
+                            return getErrorMessage({
+                                status: error.status,
+                                statusText: error.statusText
+                            });
+                        });
+                    }
+
                     var payload = error && (error.responseJSON || error.response || error.body);
 
                     if (typeof payload === 'string') {
@@ -115,6 +137,10 @@
                         } catch (parseError) {
                             return responseText.trim();
                         }
+                    }
+
+                    if (error && error.status) {
+                        return 'HTTP ' + error.status + (error.statusText ? ' ' + error.statusText : '');
                     }
 
                     return (error && (error.statusText || error.message)) || 'The server did not return an error message.';
@@ -190,7 +216,9 @@
                         fileInput.value = '';
                         showFileName();
                     }).catch(function (error) {
-                        setResult('Install failed: ' + getErrorMessage(error), 'error');
+                        Promise.resolve(getErrorMessage(error)).then(function (message) {
+                            setResult('Install failed: ' + message, 'error');
+                        });
                     }).finally(function () {
                         Dashboard.hideLoadingMsg();
                     });

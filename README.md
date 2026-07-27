@@ -23,7 +23,7 @@ The plugin matches updates by the archive's `guid`; when metadata is missing it 
 
 ## Build
 
-The project targets .NET 9 and Jellyfin 10.11.x APIs. The GitHub Actions workflows follow the [SkipMe.db plugin workflow split](https://github.com/intro-skipper/skipme.db-plugin/tree/main/.github/workflows): `Build Plugin` builds and uploads the raw DLL for every branch/PR, while `Release Plugin` manually versions, packages, and publishes a release ZIP.
+The project targets .NET 10 and Jellyfin 12.x APIs. The GitHub Actions workflows follow the [SkipMe.db plugin workflow split](https://github.com/intro-skipper/skipme.db-plugin/tree/main/.github/workflows): `Build Plugin` builds and uploads the raw DLL for every branch/PR, while `Release Plugin` manually versions, packages, and publishes a release ZIP.
 
 ```text
 dotnet publish -c Release
