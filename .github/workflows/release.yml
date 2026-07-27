@@ -1,0 +1,136 @@
+name: Release Plugin
+
+on:
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: "Mark upload as prerelease"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-plugin
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Increment patch version
+        if: ${{ inputs.prerelease != true }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import re
+
+          path = "Directory.Build.props"
+          with open(path, "r", encoding="utf-8") as file:
+              content = file.read()
+
+          match = re.search(r"<Version>(\d+)\.(\d+)\.(\d+)\.(\d+)</Version>", content)
+          if not match:
+              raise SystemExit("Could not parse <Version> in Directory.Build.props")
+
+          major, minor, patch, revision = match.groups()
+          new_version = f"{major}.{minor}.{int(patch) + 1}.{revision}"
+          for tag in ("Version", "AssemblyVersion", "FileVersion"):
+              content, count = re.subn(
+                  rf"<{tag}>\d+\.\d+\.\d+\.\d+</{tag}>",
+                  f"<{tag}>{new_version}</{tag}>",
+                  content,
+                  count=1,
+              )
+              if count != 1:
+                  raise SystemExit(f"Could not update <{tag}> in Directory.Build.props")
+
+          with open(path, "w", encoding="utf-8", newline="\n") as file:
+              file.write(content)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"NEW_VERSION={new_version}\n")
+              env.write(f"RELEASE_TAG=v{new_version}\n")
+          print(f"Increment patch version to {new_version}")
+          PY
+
+      - name: Retrieve patch version
+        if: ${{ inputs.prerelease == true }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import re
+
+          with open("Directory.Build.props", "r", encoding="utf-8") as file:
+              content = file.read()
+          match = re.search(r"<Version>(\d+)\.(\d+)\.(\d+)\.(\d+)</Version>", content)
+          if not match:
+              raise SystemExit("Could not parse <Version> in Directory.Build.props")
+          new_version = ".".join(match.groups())
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"NEW_VERSION={new_version}\n")
+              env.write(f"RELEASE_TAG=v{new_version}\n")
+          print(f"Retrieve patch version of {new_version}")
+          PY
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore Jellyfin.Plugin.PeanutButter.sln
+
+      - name: Build
+        run: dotnet build Jellyfin.Plugin.PeanutButter.sln --configuration Release --no-restore
+
+      - name: Package release artifact
+        run: |
+          zip -j "Jellyfin.Plugin.PeanutButter-${{ env.RELEASE_TAG }}.zip" \
+            bin/Release/net9.0/Jellyfin.Plugin.PeanutButter.dll
+
+      - name: Publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          PRERELEASE="false"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.prerelease }}" = "true" ]; then
+            PRERELEASE="true"
+          fi
+          if [ "$PRERELEASE" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          else
+            PRERELEASE_FLAG=""
+          fi
+
+          if gh release view "${{ env.RELEASE_TAG }}" >/dev/null 2>&1; then
+            gh release upload "${{ env.RELEASE_TAG }}" \
+              "Jellyfin.Plugin.PeanutButter-${{ env.RELEASE_TAG }}.zip" --clobber
+          else
+            gh release create "${{ env.RELEASE_TAG }}" \
+              "Jellyfin.Plugin.PeanutButter-${{ env.RELEASE_TAG }}.zip" \
+              --title "${{ env.RELEASE_TAG }}" \
+              --generate-notes \
+              --target "${{ github.event.repository.default_branch }}" \
+              ${PRERELEASE_FLAG}
+          fi
+
+      - name: Print MD5 Hash
+        run: md5sum "Jellyfin.Plugin.PeanutButter-${{ env.RELEASE_TAG }}.zip" | awk '{ print $1 }'
+
+      - name: Commit updated Directory.Build.props
+        if: ${{ inputs.prerelease != true }}
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Directory.Build.props
+          git commit -m "Increment patch version to ${{ env.NEW_VERSION }}"
+          git push
