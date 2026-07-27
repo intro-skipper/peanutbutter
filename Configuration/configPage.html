@@ -23,7 +23,7 @@
                         <span>Install plugin</span>
                     </button>
                 </form>
-                <div id="PeanutButterResult" class="fieldDescription" role="status" aria-live="polite"></div>
+                <div id="PeanutButterResult" class="peanutButterStatus" role="status" aria-live="polite" hidden></div>
             </div>
         </div>
         <style>
@@ -62,6 +62,21 @@
                 margin-top: .5em;
                 opacity: .75;
             }
+
+            .peanutButterStatus {
+                border: 1px solid rgba(255, 255, 255, .25);
+                border-radius: .4em;
+                margin-top: 1.5em;
+                padding: 1em;
+            }
+
+            .peanutButterStatus[data-state="success"] {
+                border-color: #6fcf97;
+            }
+
+            .peanutButterStatus[data-state="error"] {
+                border-color: #eb5757;
+            }
         </style>
         <script type="text/javascript">
             (function () {
@@ -72,12 +87,45 @@
                 var fileName = document.querySelector('#PluginFileName');
                 var result = document.querySelector('#PeanutButterResult');
 
+                function setResult(message, state) {
+                    result.textContent = message || '';
+                    result.dataset.state = state || '';
+                    result.hidden = !message;
+                }
+
+                function getErrorMessage(error) {
+                    var payload = error && (error.responseJSON || error.response || error.body);
+
+                    if (typeof payload === 'string') {
+                        try {
+                            payload = JSON.parse(payload);
+                        } catch (parseError) {
+                            return payload.trim() || 'The server did not return an error message.';
+                        }
+                    }
+
+                    if (payload && typeof payload === 'object') {
+                        return payload.detail || payload.Detail || payload.message || payload.Message || payload.title || payload.Title || 'The server did not return an error message.';
+                    }
+
+                    var responseText = error && error.responseText;
+                    if (typeof responseText === 'string' && responseText.trim()) {
+                        try {
+                            return getErrorMessage({ response: JSON.parse(responseText) });
+                        } catch (parseError) {
+                            return responseText.trim();
+                        }
+                    }
+
+                    return (error && (error.statusText || error.message)) || 'The server did not return an error message.';
+                }
+
                 function showFileName() {
                     fileName.textContent = fileInput.files.length ? fileInput.files[0].name : '';
                 }
 
                 page.addEventListener('pageshow', function () {
-                    result.textContent = '';
+                    setResult('');
                     fileInput.value = '';
                     showFileName();
                 });
@@ -118,14 +166,14 @@
                 form.addEventListener('submit', function (event) {
                     event.preventDefault();
                     if (!fileInput.files.length) {
-                        result.textContent = 'Choose a ZIP file first.';
+                        setResult('Choose a ZIP or DLL file first.', 'error');
                         return false;
                     }
 
                     var data = new FormData();
                     data.append('file', fileInput.files[0]);
                     Dashboard.showLoadingMsg();
-                    result.textContent = '';
+                    setResult('Installing plugin...', 'pending');
 
                     ApiClient.ajax({
                         type: 'POST',
@@ -135,12 +183,14 @@
                         contentType: false,
                         dataType: 'json'
                     }).then(function (response) {
-                        result.textContent = response.Action + ' ' + response.Name + ' ' + response.Version + '. Restart Jellyfin to load it.';
+                        var action = response.Action || response.action || 'Installed';
+                        var name = response.Name || response.name || 'plugin';
+                        var version = response.Version || response.version || 'unknown version';
+                        setResult(action + ' ' + name + ' ' + version + '. Restart Jellyfin to load it.', 'success');
                         fileInput.value = '';
                         showFileName();
                     }).catch(function (error) {
-                        var response = error.responseJSON || {};
-                        result.textContent = 'Install failed: ' + (response.detail || response.Detail || error.statusText || 'unknown error');
+                        setResult('Install failed: ' + getErrorMessage(error), 'error');
                     }).finally(function () {
                         Dashboard.hideLoadingMsg();
                     });

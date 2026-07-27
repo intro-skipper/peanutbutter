@@ -26,7 +26,7 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     }
 
     /// <inheritdoc />
-    public override string Name => "Peanut Butter Plugin Installer";
+    public override string Name => "Peanut Butter";
 
     /// <inheritdoc />
     public override Guid Id => PluginId;
@@ -37,6 +37,7 @@ public sealed class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
         yield return new PluginPageInfo
         {
             Name = Name,
+            EnableInMainMenu = true,
             EmbeddedResourcePath = string.Format(
                 CultureInfo.InvariantCulture,
                 "{0}.Configuration.configPage.html",
