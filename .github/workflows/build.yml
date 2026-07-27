@@ -36,6 +36,9 @@ jobs:
       - name: Build
         run: dotnet build Jellyfin.Plugin.PeanutButter.sln --configuration Release --no-restore
 
+      - name: Test
+        run: dotnet test Jellyfin.Plugin.PeanutButter.sln --configuration Release --no-build --verbosity normal
+
       - name: Retrieve commit identification
         run: |
           GIT_HASH=$(git rev-parse --short HEAD)

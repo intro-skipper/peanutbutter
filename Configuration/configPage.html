@@ -58,6 +58,59 @@
                         <button id="PeanutButterCancel" is="emby-button" type="button" class="button-flat">Cancel</button>
                     </div>
                 </div>
+
+                <section class="peanutButterCard peanutButterCardSpaced" aria-labelledby="PeanutButterGitHubHeading">
+                    <div class="peanutButterCardHeader">
+                        <div>
+                            <h2 id="PeanutButterGitHubHeading">Install from GitHub</h2>
+                            <p>Fetch a release straight from a repository — no manual download needed.</p>
+                        </div>
+                        <span class="peanutButterAdminBadge">No token required</span>
+                    </div>
+
+                    <div class="peanutButterGitHubForm">
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="GitHubRepoInput">Repository</label>
+                            <input is="emby-input" id="GitHubRepoInput" type="text" placeholder="owner/repo or https://github.com/owner/repo" autocomplete="off">
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="GitHubTagInput">Release tag (optional)</label>
+                            <input is="emby-input" id="GitHubTagInput" type="text" placeholder="Leave empty for the latest release" autocomplete="off">
+                        </div>
+                        <button id="GitHubFetchButton" is="emby-button" type="button" class="raised block">
+                            <span>Fetch release</span>
+                        </button>
+                    </div>
+
+                    <div id="GitHubReleasePanel" hidden>
+                        <div id="GitHubReleaseSummary" class="peanutButterReleaseSummary"></div>
+                        <div id="GitHubAssetList" class="peanutButterAssetList" role="radiogroup" aria-label="Release assets"></div>
+                        <button id="GitHubInstallButton" is="emby-button" type="button" class="raised button-submit block" disabled>
+                            <span>Install selected asset</span>
+                        </button>
+                    </div>
+
+                    <div id="GitHubResult" class="peanutButterStatus" role="status" aria-live="polite" hidden></div>
+                    <div id="GitHubConfirmation" class="peanutButterConfirmation" role="alert" hidden>
+                        <strong>Install older version?</strong>
+                        <p id="GitHubConfirmationMessage"></p>
+                        <div class="peanutButterConfirmationActions">
+                            <button id="GitHubConfirm" is="emby-button" type="button" class="raised">Install older version</button>
+                            <button id="GitHubCancel" is="emby-button" type="button" class="button-flat">Cancel</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="peanutButterCard peanutButterCardSpaced" aria-labelledby="PeanutButterSourcesHeading">
+                    <div class="peanutButterCardHeader">
+                        <div>
+                            <h2 id="PeanutButterSourcesHeading">Installed from GitHub</h2>
+                            <p>Check tracked repositories for newer releases. Nothing installs without your confirmation.</p>
+                        </div>
+                    </div>
+                    <div id="GitHubSourcesEmpty" class="peanutButterSourcesEmpty">No plugins have been installed from GitHub yet.</div>
+                    <div id="GitHubSourcesList" class="peanutButterSourcesList" hidden></div>
+                </section>
             </div>
         </div>
         <style>
@@ -290,6 +343,142 @@
                 flex-wrap: wrap;
                 gap: .75rem;
                 margin-top: 1rem;
+            }
+
+            .peanutButterCardSpaced {
+                margin-top: 1.5rem;
+            }
+
+            .peanutButterGitHubForm {
+                display: flex;
+                flex-direction: column;
+                gap: .25rem;
+                margin-top: 1.25rem;
+            }
+
+            .peanutButterReleaseSummary {
+                align-items: center;
+                border-top: 1px solid rgba(255, 255, 255, .12);
+                display: flex;
+                flex-wrap: wrap;
+                gap: .5rem .75rem;
+                margin-top: 1.25rem;
+                padding-top: 1.25rem;
+            }
+
+            .peanutButterReleaseTag {
+                color: var(--theme-primary-color);
+                font-weight: 700;
+            }
+
+            .peanutButterReleaseBadge {
+                border: 1px solid #f2c94c;
+                border-radius: 999px;
+                color: #f2c94c;
+                font-size: .72rem;
+                padding: .25rem .55rem;
+                white-space: nowrap;
+            }
+
+            .peanutButterReleaseMeta {
+                font-size: .85rem;
+                opacity: .65;
+            }
+
+            .peanutButterAssetList {
+                display: flex;
+                flex-direction: column;
+                gap: .5rem;
+                margin: 1rem 0 1.25rem;
+            }
+
+            .peanutButterAssetRow {
+                align-items: center;
+                border: 1px solid rgba(255, 255, 255, .14);
+                border-radius: .55rem;
+                cursor: pointer;
+                display: flex;
+                gap: .75rem;
+                padding: .7rem .9rem;
+                transition: border-color .15s ease, background-color .15s ease;
+            }
+
+            .peanutButterAssetRow:hover:not([data-disabled]),
+            .peanutButterAssetRow:focus-within:not([data-disabled]) {
+                background-color: rgba(255, 255, 255, .06);
+                border-color: var(--theme-primary-color);
+            }
+
+            .peanutButterAssetRow[data-disabled] {
+                cursor: not-allowed;
+                opacity: .45;
+            }
+
+            .peanutButterAssetText {
+                display: flex;
+                flex-direction: column;
+                gap: .15rem;
+                min-width: 0;
+            }
+
+            .peanutButterAssetName {
+                font-weight: 600;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .peanutButterAssetMeta {
+                font-size: .8rem;
+                opacity: .65;
+            }
+
+            .peanutButterSourcesEmpty {
+                margin-top: 1.25rem;
+                opacity: .6;
+            }
+
+            .peanutButterSourcesList {
+                display: flex;
+                flex-direction: column;
+                gap: .75rem;
+                margin-top: 1.25rem;
+            }
+
+            .peanutButterSourceRow {
+                border: 1px solid rgba(255, 255, 255, .14);
+                border-radius: .55rem;
+                padding: .85rem 1rem;
+            }
+
+            .peanutButterSourceTitle {
+                font-weight: 600;
+            }
+
+            .peanutButterSourceMeta {
+                font-size: .82rem;
+                margin-top: .25rem;
+                opacity: .65;
+            }
+
+            .peanutButterSourceStatus {
+                font-size: .85rem;
+                margin-top: .5rem;
+            }
+
+            .peanutButterSourceStatus[data-state="update"] {
+                color: #6fcf97;
+            }
+
+            .peanutButterSourceStatus[data-state="error"] {
+                color: #eb5757;
+            }
+
+            .peanutButterSourceActions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: .5rem;
+                margin-top: .75rem;
             }
 
             @keyframes peanutButterSpin {
@@ -547,6 +736,440 @@
                     event.preventDefault();
                     installPlugin(false);
                     return false;
+                });
+
+                // ----- Install from GitHub -----
+
+                var githubRepoInput = document.querySelector('#GitHubRepoInput');
+                var githubTagInput = document.querySelector('#GitHubTagInput');
+                var githubFetchButton = document.querySelector('#GitHubFetchButton');
+                var githubReleasePanel = document.querySelector('#GitHubReleasePanel');
+                var githubReleaseSummary = document.querySelector('#GitHubReleaseSummary');
+                var githubAssetList = document.querySelector('#GitHubAssetList');
+                var githubInstallButton = document.querySelector('#GitHubInstallButton');
+                var githubResult = document.querySelector('#GitHubResult');
+                var githubConfirmation = document.querySelector('#GitHubConfirmation');
+                var githubConfirmationMessage = document.querySelector('#GitHubConfirmationMessage');
+                var githubConfirmButton = document.querySelector('#GitHubConfirm');
+                var githubCancelButton = document.querySelector('#GitHubCancel');
+                var githubSourcesEmpty = document.querySelector('#GitHubSourcesEmpty');
+                var githubSourcesList = document.querySelector('#GitHubSourcesList');
+                var githubRelease = null;
+                var githubSelectedAssetId = null;
+
+                function pick(source, key) {
+                    if (!source) {
+                        return undefined;
+                    }
+
+                    if (source[key] !== undefined) {
+                        return source[key];
+                    }
+
+                    var pascal = key.charAt(0).toUpperCase() + key.slice(1);
+                    return source[pascal];
+                }
+
+                function requestJson(method, path, body) {
+                    var options = {
+                        method: method,
+                        headers: {
+                            Accept: 'application/json',
+                            Authorization: getAuthorizationHeader()
+                        },
+                        credentials: 'same-origin'
+                    };
+                    if (body !== undefined) {
+                        options.headers['Content-Type'] = 'application/json';
+                        options.body = JSON.stringify(body);
+                    }
+
+                    return fetch(ApiClient.getUrl(path), options).then(function (response) {
+                        if (!response.ok) {
+                            throw response;
+                        }
+
+                        return response.status === 204 ? null : response.json();
+                    });
+                }
+
+                function setGitHubResult(message, state) {
+                    githubResult.textContent = message || '';
+                    githubResult.dataset.state = state || '';
+                    githubResult.hidden = !message;
+                }
+
+                function setGitHubConfirmation(message, visible) {
+                    githubConfirmationMessage.textContent = message || '';
+                    githubConfirmation.hidden = !visible;
+                }
+
+                function formatBytes(bytes) {
+                    if (typeof bytes !== 'number' || !isFinite(bytes) || bytes < 0) {
+                        return '';
+                    }
+
+                    var units = ['B', 'KB', 'MB', 'GB'];
+                    var value = bytes;
+                    var unit = 0;
+                    while (value >= 1024 && unit < units.length - 1) {
+                        value /= 1024;
+                        unit++;
+                    }
+
+                    return (unit === 0 ? value : value.toFixed(1)) + ' ' + units[unit];
+                }
+
+                function updateInstallButtonState() {
+                    githubInstallButton.disabled = githubSelectedAssetId === null;
+                }
+
+                function renderGitHubRelease(release) {
+                    githubRelease = release;
+                    githubSelectedAssetId = null;
+
+                    githubReleaseSummary.textContent = '';
+                    var tagSpan = document.createElement('span');
+                    tagSpan.className = 'peanutButterReleaseTag';
+                    tagSpan.textContent = pick(release, 'tag') || '';
+                    githubReleaseSummary.appendChild(tagSpan);
+
+                    var releaseName = pick(release, 'releaseName');
+                    if (releaseName && releaseName !== pick(release, 'tag')) {
+                        var nameSpan = document.createElement('span');
+                        nameSpan.textContent = releaseName;
+                        githubReleaseSummary.appendChild(nameSpan);
+                    }
+
+                    if (pick(release, 'prerelease')) {
+                        var badge = document.createElement('span');
+                        badge.className = 'peanutButterReleaseBadge';
+                        badge.textContent = 'Pre-release';
+                        githubReleaseSummary.appendChild(badge);
+                    }
+
+                    var publishedAt = pick(release, 'publishedAt');
+                    if (publishedAt) {
+                        var dateSpan = document.createElement('span');
+                        dateSpan.className = 'peanutButterReleaseMeta';
+                        dateSpan.textContent = 'Published ' + new Date(publishedAt).toLocaleDateString();
+                        githubReleaseSummary.appendChild(dateSpan);
+                    }
+
+                    githubAssetList.textContent = '';
+                    var assets = pick(release, 'assets') || [];
+                    var recommendedId = pick(release, 'recommendedAssetId');
+                    assets.forEach(function (asset) {
+                        var id = pick(asset, 'id');
+                        var installable = pick(asset, 'installable');
+                        var row = document.createElement('label');
+                        row.className = 'peanutButterAssetRow';
+
+                        var radio = document.createElement('input');
+                        radio.type = 'radio';
+                        radio.name = 'GitHubAssetChoice';
+                        radio.value = String(id);
+                        radio.disabled = !installable;
+                        if (installable && recommendedId !== null && recommendedId !== undefined && id === recommendedId) {
+                            radio.checked = true;
+                            githubSelectedAssetId = id;
+                        }
+
+                        radio.addEventListener('change', function () {
+                            githubSelectedAssetId = id;
+                            setGitHubConfirmation('', false);
+                            updateInstallButtonState();
+                        });
+
+                        var text = document.createElement('span');
+                        text.className = 'peanutButterAssetText';
+                        var name = document.createElement('span');
+                        name.className = 'peanutButterAssetName';
+                        name.textContent = pick(asset, 'name') || '';
+                        var meta = document.createElement('span');
+                        meta.className = 'peanutButterAssetMeta';
+                        var metaParts = [];
+                        var size = formatBytes(pick(asset, 'size'));
+                        if (size) {
+                            metaParts.push(size);
+                        }
+
+                        if (!installable) {
+                            metaParts.push(pick(asset, 'kind') === 'Other' ? 'not a plugin package' : 'too large');
+                        } else if (pick(asset, 'digest')) {
+                            metaParts.push('digest verifiable');
+                        }
+
+                        meta.textContent = metaParts.join(' · ');
+                        text.appendChild(name);
+                        text.appendChild(meta);
+
+                        if (!installable) {
+                            row.setAttribute('data-disabled', '');
+                        }
+
+                        row.appendChild(radio);
+                        row.appendChild(text);
+                        githubAssetList.appendChild(row);
+                    });
+
+                    githubReleasePanel.hidden = false;
+                    updateInstallButtonState();
+                }
+
+                function fetchGitHubRelease() {
+                    var repository = (githubRepoInput.value || '').trim();
+                    if (!repository) {
+                        setGitHubResult('Enter a repository as owner/repo or paste its github.com URL.', 'error');
+                        return;
+                    }
+
+                    githubFetchButton.disabled = true;
+                    setGitHubConfirmation('', false);
+                    githubReleasePanel.hidden = true;
+                    setGitHubResult('Fetching release information...', 'pending');
+
+                    requestJson('POST', 'Plugins/PeanutButter/GitHub/Resolve', {
+                        Repository: repository,
+                        Tag: (githubTagInput.value || '').trim() || null
+                    }).then(function (release) {
+                        setGitHubResult('');
+                        renderGitHubRelease(release);
+                        if (githubSelectedAssetId === null) {
+                            var hasInstallable = (pick(release, 'assets') || []).some(function (asset) {
+                                return pick(asset, 'installable');
+                            });
+                            setGitHubResult(
+                                hasInstallable
+                                    ? 'Several assets qualify. Pick the one to install.'
+                                    : 'This release has no installable ZIP or DLL asset.',
+                                hasInstallable ? 'warning' : 'error');
+                        }
+                    }).catch(function (error) {
+                        Promise.resolve(getErrorMessage(error)).then(function (message) {
+                            setGitHubResult('Could not fetch the release: ' + message, 'error');
+                        });
+                    }).finally(function () {
+                        githubFetchButton.disabled = false;
+                    });
+                }
+
+                function installGitHubAsset(confirmOlderVersion) {
+                    if (!githubRelease || githubSelectedAssetId === null) {
+                        return;
+                    }
+
+                    githubInstallButton.disabled = true;
+                    githubFetchButton.disabled = true;
+                    Dashboard.showLoadingMsg();
+                    setGitHubResult('Downloading and installing from GitHub...', 'pending');
+
+                    requestJson('POST', 'Plugins/PeanutButter/GitHub/Install', {
+                        Owner: pick(githubRelease, 'owner'),
+                        Repo: pick(githubRelease, 'repo'),
+                        Tag: pick(githubRelease, 'tag'),
+                        AssetId: githubSelectedAssetId,
+                        ConfirmOlderVersion: !!confirmOlderVersion
+                    }).then(function (response) {
+                        var install = pick(response, 'install') || response;
+                        var action = pick(install, 'action') || 'Installed';
+                        var name = pick(install, 'name') || 'plugin';
+                        var version = pick(install, 'version') || 'unknown version';
+                        var digestNote = pick(response, 'digestVerified')
+                            ? ' Digest verified.'
+                            : ' GitHub published no digest for this asset.';
+                        setGitHubResult(
+                            action + ' ' + name + ' ' + version + '.' + digestNote
+                            + ' Restart Jellyfin to load the plugin.',
+                            'success');
+                        setGitHubConfirmation('', false);
+                        loadGitHubSources();
+                    }).catch(function (error) {
+                        if (error && error.status === 409 && typeof error.clone === 'function') {
+                            error.clone().json().then(function (payload) {
+                                var extensions = payload.extensions || payload.Extensions || {};
+                                if (extensions.requiresConfirmation || extensions.RequiresConfirmation) {
+                                    setGitHubResult('Installation paused. Confirmation is required to install an older version.', 'warning');
+                                    setGitHubConfirmation(payload.detail || payload.Detail || 'The selected release is older than the installed version.', true);
+                                    return;
+                                }
+
+                                setGitHubResult('Install failed: ' + (payload.detail || payload.Detail || payload.title || payload.Title || 'Conflict'), 'error');
+                            }).catch(function () {
+                                setGitHubResult('Install failed: HTTP 409', 'error');
+                            });
+                            return;
+                        }
+
+                        Promise.resolve(getErrorMessage(error)).then(function (message) {
+                            setGitHubResult('Install failed: ' + message, 'error');
+                        });
+                    }).finally(function () {
+                        githubFetchButton.disabled = false;
+                        updateInstallButtonState();
+                        Dashboard.hideLoadingMsg();
+                    });
+                }
+
+                function checkGitHubUpdate(source, statusElement, updateButtonHost) {
+                    statusElement.textContent = 'Checking for updates...';
+                    statusElement.dataset.state = '';
+                    updateButtonHost.textContent = '';
+
+                    requestJson('POST', 'Plugins/PeanutButter/GitHub/CheckUpdate', {
+                        Owner: pick(source, 'owner'),
+                        Repo: pick(source, 'repo')
+                    }).then(function (result) {
+                        var latest = pick(result, 'latest');
+                        if (pick(result, 'updateAvailable') && latest) {
+                            statusElement.textContent = 'Update available: ' + (pick(latest, 'tag') || 'newer release');
+                            statusElement.dataset.state = 'update';
+
+                            var updateButton = document.createElement('button');
+                            updateButton.setAttribute('is', 'emby-button');
+                            updateButton.type = 'button';
+                            updateButton.className = 'raised';
+                            var label = document.createElement('span');
+                            label.textContent = 'Review update';
+                            updateButton.appendChild(label);
+                            updateButton.addEventListener('click', function () {
+                                githubRepoInput.value = pick(source, 'owner') + '/' + pick(source, 'repo');
+                                githubTagInput.value = pick(latest, 'tag') || '';
+                                setGitHubResult('');
+                                setGitHubConfirmation('', false);
+                                renderGitHubRelease(latest);
+                                githubReleasePanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            });
+                            updateButtonHost.appendChild(updateButton);
+                        } else {
+                            statusElement.textContent = 'Up to date (' + (pick(result, 'installedVersion') || pick(result, 'installedTag') || 'installed') + ').';
+                        }
+                    }).catch(function (error) {
+                        Promise.resolve(getErrorMessage(error)).then(function (message) {
+                            statusElement.textContent = 'Update check failed: ' + message;
+                            statusElement.dataset.state = 'error';
+                        });
+                    });
+                }
+
+                function removeGitHubSource(source) {
+                    var path = 'Plugins/PeanutButter/GitHub/Sources?owner=' + encodeURIComponent(pick(source, 'owner'))
+                        + '&repo=' + encodeURIComponent(pick(source, 'repo'));
+                    requestJson('DELETE', path).then(function () {
+                        loadGitHubSources();
+                    }).catch(function (error) {
+                        Promise.resolve(getErrorMessage(error)).then(function (message) {
+                            setGitHubResult('Could not remove the tracked repository: ' + message, 'error');
+                        });
+                    });
+                }
+
+                function renderGitHubSources(sources) {
+                    githubSourcesList.textContent = '';
+                    var hasSources = sources && sources.length > 0;
+                    githubSourcesEmpty.hidden = hasSources;
+                    githubSourcesList.hidden = !hasSources;
+                    if (!hasSources) {
+                        return;
+                    }
+
+                    sources.forEach(function (source) {
+                        var row = document.createElement('div');
+                        row.className = 'peanutButterSourceRow';
+
+                        var title = document.createElement('div');
+                        title.className = 'peanutButterSourceTitle';
+                        title.textContent = (pick(source, 'pluginName') || 'Plugin') + ' — ' + pick(source, 'owner') + '/' + pick(source, 'repo');
+
+                        var meta = document.createElement('div');
+                        meta.className = 'peanutButterSourceMeta';
+                        var installedAt = pick(source, 'installedAtUtc');
+                        meta.textContent = 'Version ' + (pick(source, 'version') || '?')
+                            + ' from tag ' + (pick(source, 'tagName') || '?')
+                            + (installedAt ? ' · installed ' + new Date(installedAt).toLocaleDateString() : '');
+
+                        var status = document.createElement('div');
+                        status.className = 'peanutButterSourceStatus';
+
+                        var actions = document.createElement('div');
+                        actions.className = 'peanutButterSourceActions';
+                        var updateHost = document.createElement('span');
+
+                        var checkButton = document.createElement('button');
+                        checkButton.setAttribute('is', 'emby-button');
+                        checkButton.type = 'button';
+                        checkButton.className = 'raised';
+                        var checkLabel = document.createElement('span');
+                        checkLabel.textContent = 'Check for updates';
+                        checkButton.appendChild(checkLabel);
+                        checkButton.addEventListener('click', function () {
+                            checkGitHubUpdate(source, status, updateHost);
+                        });
+
+                        var removeButton = document.createElement('button');
+                        removeButton.setAttribute('is', 'emby-button');
+                        removeButton.type = 'button';
+                        removeButton.className = 'button-flat';
+                        var removeLabel = document.createElement('span');
+                        removeLabel.textContent = 'Stop tracking';
+                        removeButton.appendChild(removeLabel);
+                        removeButton.addEventListener('click', function () {
+                            removeGitHubSource(source);
+                        });
+
+                        actions.appendChild(checkButton);
+                        actions.appendChild(updateHost);
+                        actions.appendChild(removeButton);
+
+                        row.appendChild(title);
+                        row.appendChild(meta);
+                        row.appendChild(status);
+                        row.appendChild(actions);
+                        githubSourcesList.appendChild(row);
+                    });
+                }
+
+                function loadGitHubSources() {
+                    requestJson('GET', 'Plugins/PeanutButter/GitHub/Sources').then(function (sources) {
+                        renderGitHubSources(sources || []);
+                    }).catch(function () {
+                        // Leave the empty-state text in place when the list cannot be loaded.
+                    });
+                }
+
+                githubFetchButton.addEventListener('click', fetchGitHubRelease);
+                githubInstallButton.addEventListener('click', function () {
+                    installGitHubAsset(false);
+                });
+                githubConfirmButton.addEventListener('click', function () {
+                    setGitHubConfirmation('', false);
+                    installGitHubAsset(true);
+                });
+                githubCancelButton.addEventListener('click', function () {
+                    setGitHubConfirmation('', false);
+                    setGitHubResult('The older version was not installed.', 'warning');
+                });
+                githubRepoInput.addEventListener('keydown', function (event) {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        fetchGitHubRelease();
+                    }
+                });
+                githubTagInput.addEventListener('keydown', function (event) {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        fetchGitHubRelease();
+                    }
+                });
+
+                page.addEventListener('pageshow', function () {
+                    setGitHubResult('');
+                    setGitHubConfirmation('', false);
+                    githubReleasePanel.hidden = true;
+                    githubRelease = null;
+                    githubSelectedAssetId = null;
+                    updateInstallButtonState();
+                    loadGitHubSources();
                 });
             }());
         </script>

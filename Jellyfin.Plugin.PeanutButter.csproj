@@ -7,6 +7,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <!-- The plugin project lives at the repo root, so the nested test project must be
+         excluded from its default compile/content globs. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);Jellyfin.Plugin.PeanutButter.Tests/**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
@@ -19,5 +22,8 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Configuration\configPage.html" LogicalName="$(RootNamespace).Configuration.configPage.html" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Jellyfin.Plugin.PeanutButter.Tests" />
   </ItemGroup>
 </Project>

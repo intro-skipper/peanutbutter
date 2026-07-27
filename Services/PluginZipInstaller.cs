@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -607,7 +608,7 @@ public sealed partial class PluginZipInstaller
             .FirstOrDefault();
     }
 
-    private static Version ParsePluginVersion(string metadataVersion, string directoryName)
+    internal static Version ParsePluginVersion(string metadataVersion, string directoryName)
     {
         if (Version.TryParse(metadataVersion, out var parsedMetadataVersion))
         {
@@ -781,7 +782,7 @@ public sealed partial class PluginZipInstaller
         }
     }
 
-    private static string NormalizeArchivePath(string path)
+    internal static string NormalizeArchivePath(string path)
     {
         var normalized = path.Replace('\\', '/');
         if (string.IsNullOrWhiteSpace(normalized)
@@ -801,7 +802,7 @@ public sealed partial class PluginZipInstaller
         return string.Join('/', segments);
     }
 
-    private static string FindCommonRootPrefix(string[] paths)
+    internal static string FindCommonRootPrefix(string[] paths)
     {
         if (paths.Length == 0)
         {
@@ -843,7 +844,7 @@ public sealed partial class PluginZipInstaller
             : string.Empty;
     }
 
-    private static string SanitizeFolderName(string value)
+    internal static string SanitizeFolderName(string value)
     {
         var invalidCharacters = Path.GetInvalidFileNameChars();
         var sanitized = new string(value
@@ -862,6 +863,28 @@ public sealed partial class PluginZipInstaller
 
     private static DirectAssemblyInfo VerifyPluginAssembly(string path)
     {
+        WeakReference? contextReference = null;
+        try
+        {
+            return InspectPluginAssembly(path, out contextReference);
+        }
+        finally
+        {
+            // A collectible AssemblyLoadContext releases its file mapping only once the GC
+            // has collected it. Wait for that here, or the staged DLL stays locked on
+            // Windows and the subsequent move/cleanup of the staging directory fails.
+            for (var attempt = 0; contextReference is { IsAlive: true } && attempt < 10; attempt++)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static DirectAssemblyInfo InspectPluginAssembly(string path, out WeakReference? contextReference)
+    {
+        contextReference = null;
         AssemblyName assemblyName;
         try
         {
@@ -873,6 +896,7 @@ public sealed partial class PluginZipInstaller
         }
 
         using var loadContext = new PluginInspectionLoadContext(path);
+        contextReference = new WeakReference(loadContext);
         Assembly assembly;
         try
         {
@@ -960,7 +984,7 @@ public sealed partial class PluginZipInstaller
                 File.Delete(path);
             }
         }
-        catch (IOException exception)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             LogTemporaryFileDeleteFailure(_logger, exception, path);
         }
@@ -975,7 +999,7 @@ public sealed partial class PluginZipInstaller
                 Directory.Delete(path, recursive: true);
             }
         }
-        catch (IOException exception)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             LogTemporaryDirectoryDeleteFailure(_logger, exception, path);
         }
