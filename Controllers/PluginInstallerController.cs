@@ -1,4 +1,5 @@
 using Jellyfin.Plugin.PeanutButter.Services;
+using MediaBrowser.Common;
 using MediaBrowser.Common.Configuration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -17,15 +18,18 @@ public sealed partial class PluginInstallerController : ControllerBase
 {
     private readonly PluginZipInstaller _installer;
     private readonly ILogger<PluginInstallerController> _logger;
+    private readonly IApplicationHost _applicationHost;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PluginInstallerController"/> class.
     /// </summary>
     public PluginInstallerController(
         IApplicationPaths applicationPaths,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IApplicationHost applicationHost)
     {
         _logger = loggerFactory.CreateLogger<PluginInstallerController>();
+        _applicationHost = applicationHost;
         _installer = new PluginZipInstaller(
             applicationPaths.PluginsPath,
             loggerFactory.CreateLogger<PluginZipInstaller>());
@@ -71,6 +75,7 @@ public sealed partial class PluginInstallerController : ControllerBase
                     file.FileName,
                     file.Length,
                     cancellationToken).ConfigureAwait(false);
+            _applicationHost.NotifyPendingRestart();
             return Ok(result);
         }
         catch (PluginArchiveException exception)

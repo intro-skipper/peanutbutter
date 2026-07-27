@@ -81,6 +81,7 @@ public sealed partial class PluginZipInstaller
         var extractedPath = Path.Combine(_stagingPath, operationId);
         var movedExistingPath = string.Empty;
         var targetPath = string.Empty;
+        var newDirectoryCreated = false;
         var newDirectoryMoved = false;
 
         try
@@ -120,6 +121,8 @@ public sealed partial class PluginZipInstaller
             }
 
             Directory.Move(extractedPath, targetPath);
+            newDirectoryCreated = true;
+            VerifyInstalledAssembly(targetPath, archiveInfo);
             newDirectoryMoved = true;
 
             if (!string.IsNullOrEmpty(movedExistingPath))
@@ -179,6 +182,10 @@ public sealed partial class PluginZipInstaller
                     LogPluginRollbackFailure(_logger, rollbackException, targetPath, movedExistingPath);
                 }
             }
+            else if (!newDirectoryMoved && newDirectoryCreated && Directory.Exists(targetPath))
+            {
+                TryDeleteDirectory(targetPath);
+            }
 
             TryDeleteFile(uploadPath);
             TryDeleteDirectory(extractedPath);
@@ -215,6 +222,7 @@ public sealed partial class PluginZipInstaller
         var dllName = Path.GetFileName(fileName);
         var movedExistingPath = string.Empty;
         var targetPath = string.Empty;
+        var newDirectoryCreated = false;
         var newDirectoryMoved = false;
 
         try
@@ -244,7 +252,9 @@ public sealed partial class PluginZipInstaller
                 null,
                 assemblyInfo.AssemblyName,
                 assemblyInfo.Version,
-                SanitizeFolderName(assemblyInfo.AssemblyName));
+                SanitizeFolderName(assemblyInfo.AssemblyName),
+                assemblyInfo.AssemblyName,
+                assemblyInfo.AssemblyFileName);
             if (string.IsNullOrEmpty(archiveInfo.FolderName))
             {
                 throw new PluginArchiveException("The DLL does not have a usable assembly name.");
@@ -267,6 +277,8 @@ public sealed partial class PluginZipInstaller
             }
 
             Directory.Move(extractedPath, targetPath);
+            newDirectoryCreated = true;
+            VerifyInstalledAssembly(targetPath, archiveInfo);
             newDirectoryMoved = true;
             if (!string.IsNullOrEmpty(movedExistingPath))
             {
@@ -327,6 +339,10 @@ public sealed partial class PluginZipInstaller
                 {
                     LogDllRollbackFailure(_logger, rollbackException, targetPath, movedExistingPath);
                 }
+            }
+            else if (!newDirectoryMoved && newDirectoryCreated && Directory.Exists(targetPath))
+            {
+                TryDeleteDirectory(targetPath);
             }
 
             TryDeleteDirectory(extractedPath);
@@ -484,7 +500,9 @@ public sealed partial class PluginZipInstaller
             pluginId,
             name,
             string.IsNullOrWhiteSpace(version) ? verifiedAssembly.Version : version,
-            name);
+            name,
+            verifiedAssembly.AssemblyName,
+            verifiedAssembly.AssemblyFileName);
     }
 
     private ExistingPlugin? FindExistingPlugin(PluginArchiveInfo archiveInfo)
@@ -494,6 +512,7 @@ public sealed partial class PluginZipInstaller
             return null;
         }
 
+        var matches = new List<ExistingPlugin>();
         foreach (var directory in Directory.EnumerateDirectories(_pluginsPath))
         {
             var directoryName = Path.GetFileName(directory);
@@ -503,6 +522,8 @@ public sealed partial class PluginZipInstaller
                 continue;
             }
 
+            var matched = false;
+            var version = string.Empty;
             var metadataPath = Directory.EnumerateFiles(directory, "meta.json", SearchOption.TopDirectoryOnly)
                 .FirstOrDefault();
             if (metadataPath is not null)
@@ -513,14 +534,16 @@ public sealed partial class PluginZipInstaller
                     var existingId = ReadGuid(metadata.RootElement, "guid") ?? ReadGuid(metadata.RootElement, "id");
                     if (archiveInfo.PluginId.HasValue && existingId == archiveInfo.PluginId)
                     {
-                        return new ExistingPlugin(directory);
+                        matched = true;
                     }
 
                     var existingName = ReadString(metadata.RootElement, "name");
                     if (string.Equals(SanitizeFolderName(existingName), archiveInfo.FolderName, StringComparison.OrdinalIgnoreCase))
                     {
-                        return new ExistingPlugin(directory);
+                        matched = true;
                     }
+
+                    version = ReadString(metadata.RootElement, "version");
                 }
                 catch (JsonException)
                 {
@@ -530,20 +553,41 @@ public sealed partial class PluginZipInstaller
 
             if (string.Equals(directoryName, archiveInfo.FolderName, StringComparison.OrdinalIgnoreCase))
             {
-                return new ExistingPlugin(directory);
+                matched = true;
             }
 
             if (Directory.EnumerateFiles(directory, "*.dll", SearchOption.TopDirectoryOnly)
                 .Any(path => string.Equals(
                     Path.GetFileNameWithoutExtension(path),
-                    archiveInfo.FolderName,
+                    archiveInfo.AssemblyName,
                     StringComparison.OrdinalIgnoreCase)))
             {
-                return new ExistingPlugin(directory);
+                matched = true;
+            }
+
+            if (matched)
+            {
+                matches.Add(new ExistingPlugin(directory, ParsePluginVersion(version, directoryName)));
             }
         }
 
-        return null;
+        return matches
+            .OrderByDescending(match => match.Version)
+            .FirstOrDefault();
+    }
+
+    private static Version ParsePluginVersion(string metadataVersion, string directoryName)
+    {
+        if (Version.TryParse(metadataVersion, out var parsedMetadataVersion))
+        {
+            return parsedMetadataVersion;
+        }
+
+        var separator = directoryName.LastIndexOf('_');
+        return separator >= 0
+            && Version.TryParse(directoryName[(separator + 1)..], out var parsedDirectoryVersion)
+            ? parsedDirectoryVersion
+            : new Version(0, 0, 0, 0);
     }
 
     private void EnsureSafePluginPath(string path)
@@ -695,7 +739,8 @@ public sealed partial class PluginZipInstaller
 
         return new DirectAssemblyInfo(
             assemblyName.Name ?? Path.GetFileNameWithoutExtension(path),
-            assemblyName.Version?.ToString() ?? "0.0.0.0");
+            assemblyName.Version?.ToString() ?? "0.0.0.0",
+            Path.GetFileName(path));
     }
 
     private static bool ContainsPluginType(IEnumerable<Type> types)
@@ -704,6 +749,38 @@ public sealed partial class PluginZipInstaller
             && !type.IsAbstract
             && type.IsPublic
             && typeof(IPlugin).IsAssignableFrom(type));
+
+    private static void VerifyInstalledAssembly(string targetPath, PluginArchiveInfo archiveInfo)
+    {
+        var installedPath = Directory.EnumerateFiles(targetPath, "*.dll", SearchOption.AllDirectories)
+            .FirstOrDefault(path => string.Equals(
+                Path.GetFileName(path),
+                archiveInfo.AssemblyFileName,
+                StringComparison.OrdinalIgnoreCase));
+        if (installedPath is null)
+        {
+            throw new PluginArchiveException(
+                $"The plugin was not installed because '{archiveInfo.AssemblyFileName}' was not found in the destination folder.");
+        }
+
+        AssemblyName installedAssembly;
+        try
+        {
+            installedAssembly = AssemblyName.GetAssemblyName(installedPath);
+        }
+        catch (BadImageFormatException exception)
+        {
+            throw new PluginArchiveException(
+                "The plugin was not installed because the destination DLL is not a valid managed assembly.",
+                exception);
+        }
+
+        if (!string.Equals(installedAssembly.Name, archiveInfo.AssemblyName, StringComparison.Ordinal))
+        {
+            throw new PluginArchiveException(
+                $"The plugin was not installed because the destination DLL is '{installedAssembly.Name}', not '{archiveInfo.AssemblyName}'.");
+        }
+    }
 
     private void TryDeleteFile(string path)
     {
@@ -735,11 +812,17 @@ public sealed partial class PluginZipInstaller
         }
     }
 
-    private sealed record ExistingPlugin(string FullPath);
+    private sealed record ExistingPlugin(string FullPath, Version Version);
 
-    private sealed record PluginArchiveInfo(Guid? PluginId, string Name, string Version, string FolderName);
+    private sealed record PluginArchiveInfo(
+        Guid? PluginId,
+        string Name,
+        string Version,
+        string FolderName,
+        string AssemblyName,
+        string AssemblyFileName);
 
-    private sealed record DirectAssemblyInfo(string AssemblyName, string Version);
+    private sealed record DirectAssemblyInfo(string AssemblyName, string Version, string AssemblyFileName);
 
     private sealed class PluginInspectionLoadContext : AssemblyLoadContext, IDisposable
     {
