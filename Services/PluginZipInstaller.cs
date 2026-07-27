@@ -357,7 +357,7 @@ public sealed partial class PluginZipInstaller
         string destinationPath,
         CancellationToken cancellationToken)
     {
-        using var archive = ZipFile.OpenRead(archivePath);
+        await using var archive = await ZipFile.OpenReadAsync(archivePath, cancellationToken).ConfigureAwait(false);
         var fileEntries = archive.Entries.Where(entry => !IsDirectory(entry)).ToArray();
         if (fileEntries.Length == 0)
         {
@@ -412,7 +412,7 @@ public sealed partial class PluginZipInstaller
             }
 
             Directory.CreateDirectory(parent);
-            await using var input = fileEntries[index].Open();
+            await using var input = await fileEntries[index].OpenAsync(cancellationToken).ConfigureAwait(false);
             await using var output = new FileStream(
                 destination,
                 FileMode.CreateNew,
@@ -732,8 +732,8 @@ public sealed partial class PluginZipInstaller
         var normalized = path.Replace('\\', '/');
         if (string.IsNullOrWhiteSpace(normalized)
             || normalized.StartsWith('/')
-            || normalized.Contains(':')
-            || normalized.Contains('\0'))
+            || normalized.Contains(':', StringComparison.Ordinal)
+            || normalized.Contains('\0', StringComparison.Ordinal))
         {
             throw new PluginArchiveException($"The archive contains an invalid path: '{path}'.");
         }
