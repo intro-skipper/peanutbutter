@@ -44,10 +44,12 @@ public sealed partial class PluginInstallerController : ControllerBase
     [HttpPost("Install")]
     [RequestSizeLimit(PluginZipInstaller.MaximumUploadBytes)]
     [ProducesResponseType(typeof(PluginInstallResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<PluginInstallResult>> Install(
         IFormFile? file,
+        [FromQuery] bool confirmOlderVersion,
         CancellationToken cancellationToken)
     {
         if (file is null || file.Length == 0)
@@ -69,14 +71,30 @@ public sealed partial class PluginInstallerController : ControllerBase
                     stream,
                     file.FileName,
                     file.Length,
+                    confirmOlderVersion,
                     cancellationToken).ConfigureAwait(false)
                 : await _installer.InstallAsync(
                     stream,
                     file.FileName,
                     file.Length,
+                    confirmOlderVersion,
                     cancellationToken).ConfigureAwait(false);
             _applicationHost.NotifyPendingRestart();
             return Ok(result);
+        }
+        catch (PluginDowngradeException exception)
+        {
+            LogDowngradeConfirmationRequired(_logger, exception, file.FileName);
+            var problem = new ProblemDetails
+            {
+                Title = "Older plugin version requires confirmation",
+                Detail = exception.Message,
+                Status = StatusCodes.Status409Conflict
+            };
+            problem.Extensions["requiresConfirmation"] = true;
+            problem.Extensions["installedVersion"] = exception.InstalledVersion;
+            problem.Extensions["requestedVersion"] = exception.RequestedVersion;
+            return Conflict(problem);
         }
         catch (PluginArchiveException exception)
         {
@@ -112,4 +130,7 @@ public sealed partial class PluginInstallerController : ControllerBase
 
     [LoggerMessage(EventId = 2002, Level = LogLevel.Error, Message = "Unexpected error installing plugin {FileName}")]
     private static partial void LogUnexpectedInstallError(ILogger logger, Exception exception, string fileName);
+
+    [LoggerMessage(EventId = 2003, Level = LogLevel.Warning, Message = "Downgrade confirmation required for plugin {FileName}")]
+    private static partial void LogDowngradeConfirmationRequired(ILogger logger, Exception exception, string fileName);
 }

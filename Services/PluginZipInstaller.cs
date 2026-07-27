@@ -26,6 +26,7 @@ public sealed partial class PluginZipInstaller
 
     private const int MaximumEntryCount = 10_000;
     private const long MaximumMetadataBytes = 1 * 1024 * 1024;
+    private static readonly JsonSerializerOptions _metadataJsonOptions = new() { WriteIndented = true };
     private readonly string _pluginsPath;
     private readonly string _stagingPath;
     private readonly ILogger<PluginZipInstaller> _logger;
@@ -53,12 +54,14 @@ public sealed partial class PluginZipInstaller
     /// <param name="archiveStream">The ZIP stream.</param>
     /// <param name="fileName">The client-supplied file name, used for diagnostics only.</param>
     /// <param name="length">The client-reported upload length.</param>
+    /// <param name="confirmOlderVersion">Whether an explicitly requested downgrade may proceed.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The result of the installation.</returns>
     public async Task<PluginInstallResult> InstallAsync(
         Stream archiveStream,
         string? fileName,
         long length,
+        bool confirmOlderVersion,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(archiveStream);
@@ -103,18 +106,31 @@ public sealed partial class PluginZipInstaller
 
             var archiveInfo = ReadArchiveInfo(extractedPath, _logger);
             var existingDirectory = FindExistingPlugin(archiveInfo);
-            PrepareManifestlessUpdate(extractedPath, existingDirectory?.FullPath, archiveInfo);
-            targetPath = existingDirectory?.FullPath
-                ?? Path.Combine(_pluginsPath, archiveInfo.FolderName);
-
-            EnsureSafePluginPath(targetPath);
-            if (existingDirectory is null && Directory.Exists(targetPath))
+            var versionComparison = existingDirectory is null
+                ? 1
+                : CompareVersions(archiveInfo.Version, existingDirectory.Version);
+            if (versionComparison < 0 && !confirmOlderVersion)
             {
-                throw new PluginArchiveException(
-                    $"The destination folder '{Path.GetFileName(targetPath)}' already exists but does not identify the same plugin.");
+                throw new PluginDowngradeException(
+                    archiveInfo.Name,
+                    existingDirectory!.Version.ToString(),
+                    archiveInfo.Version);
             }
 
-            if (existingDirectory is not null)
+            PrepareManifestlessUpdate(extractedPath, existingDirectory?.FullPath, archiveInfo);
+            var replaceExistingDirectory = existingDirectory is not null && versionComparison <= 0;
+            targetPath = replaceExistingDirectory
+                ? existingDirectory!.FullPath
+                : Path.Combine(_pluginsPath, BuildVersionedFolderName(archiveInfo));
+
+            EnsureSafePluginPath(targetPath);
+            if (!replaceExistingDirectory && Directory.Exists(targetPath))
+            {
+                throw new PluginArchiveException(
+                    $"The versioned destination folder '{Path.GetFileName(targetPath)}' already exists and cannot be replaced as a new Jellyfin update.");
+            }
+
+            if (replaceExistingDirectory)
             {
                 movedExistingPath = Path.Combine(
                     _stagingPath,
@@ -200,12 +216,14 @@ public sealed partial class PluginZipInstaller
     /// <param name="pluginStream">The DLL stream.</param>
     /// <param name="fileName">The client-supplied file name, used for diagnostics only.</param>
     /// <param name="length">The client-reported upload length.</param>
+    /// <param name="confirmOlderVersion">Whether an explicitly requested downgrade may proceed.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The result of the installation.</returns>
     public async Task<PluginInstallResult> InstallDllAsync(
         Stream pluginStream,
         string? fileName,
         long length,
+        bool confirmOlderVersion,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pluginStream);
@@ -263,17 +281,30 @@ public sealed partial class PluginZipInstaller
             }
 
             var existingDirectory = FindExistingPlugin(archiveInfo);
-            PrepareManifestlessUpdate(extractedPath, existingDirectory?.FullPath, archiveInfo);
-            targetPath = existingDirectory?.FullPath
-                ?? Path.Combine(_pluginsPath, archiveInfo.FolderName);
-            EnsureSafePluginPath(targetPath);
-            if (existingDirectory is null && Directory.Exists(targetPath))
+            var versionComparison = existingDirectory is null
+                ? 1
+                : CompareVersions(archiveInfo.Version, existingDirectory.Version);
+            if (versionComparison < 0 && !confirmOlderVersion)
             {
-                throw new PluginArchiveException(
-                    $"The destination folder '{Path.GetFileName(targetPath)}' already exists but does not identify the same plugin.");
+                throw new PluginDowngradeException(
+                    archiveInfo.Name,
+                    existingDirectory!.Version.ToString(),
+                    archiveInfo.Version);
             }
 
-            if (existingDirectory is not null)
+            PrepareManifestlessUpdate(extractedPath, existingDirectory?.FullPath, archiveInfo);
+            var replaceExistingDirectory = existingDirectory is not null && versionComparison <= 0;
+            targetPath = replaceExistingDirectory
+                ? existingDirectory!.FullPath
+                : Path.Combine(_pluginsPath, BuildVersionedFolderName(archiveInfo));
+            EnsureSafePluginPath(targetPath);
+            if (!replaceExistingDirectory && Directory.Exists(targetPath))
+            {
+                throw new PluginArchiveException(
+                    $"The versioned destination folder '{Path.GetFileName(targetPath)}' already exists and cannot be replaced as a new Jellyfin update.");
+            }
+
+            if (replaceExistingDirectory)
             {
                 movedExistingPath = Path.Combine(_stagingPath, $"backup-{operationId}");
                 Directory.Move(targetPath, movedExistingPath);
@@ -613,6 +644,29 @@ public sealed partial class PluginZipInstaller
         }
     }
 
+    private static int CompareVersions(string candidateVersion, Version installedVersion)
+    {
+        if (!Version.TryParse(candidateVersion, out var parsedCandidateVersion))
+        {
+            throw new PluginArchiveException($"The plugin version '{candidateVersion}' is not valid.");
+        }
+
+        var normalizedCandidateVersion = new Version(
+            parsedCandidateVersion.Major,
+            parsedCandidateVersion.Minor,
+            Math.Max(parsedCandidateVersion.Build, 0),
+            Math.Max(parsedCandidateVersion.Revision, 0));
+        var normalizedInstalledVersion = new Version(
+            installedVersion.Major,
+            installedVersion.Minor,
+            Math.Max(installedVersion.Build, 0),
+            Math.Max(installedVersion.Revision, 0));
+        return normalizedCandidateVersion.CompareTo(normalizedInstalledVersion);
+    }
+
+    private static string BuildVersionedFolderName(PluginArchiveInfo archiveInfo)
+        => $"{archiveInfo.FolderName}_{SanitizeFolderName(archiveInfo.Version)}";
+
     private static void PrepareManifestlessUpdate(
         string extractedPath,
         string? existingPath,
@@ -655,7 +709,7 @@ public sealed partial class PluginZipInstaller
 
                     File.WriteAllText(
                         destinationMetadataPath,
-                        metadataObject.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+                        metadataObject.ToJsonString(_metadataJsonOptions));
                 }
                 else
                 {
@@ -1064,4 +1118,30 @@ public sealed class PluginArchiveException : Exception
         : base(message, innerException)
     {
     }
+}
+
+/// <summary>
+/// Indicates that an uploaded plugin is older than the installed version and requires confirmation.
+/// </summary>
+public sealed class PluginDowngradeException : Exception
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PluginDowngradeException"/> class.
+    /// </summary>
+    public PluginDowngradeException(string pluginName, string installedVersion, string requestedVersion)
+        : base($"'{pluginName}' version {requestedVersion} is older than the installed version {installedVersion}. Confirm the downgrade to continue.")
+    {
+        PluginName = pluginName;
+        InstalledVersion = installedVersion;
+        RequestedVersion = requestedVersion;
+    }
+
+    /// <summary>Gets the plugin name.</summary>
+    public string PluginName { get; }
+
+    /// <summary>Gets the installed version.</summary>
+    public string InstalledVersion { get; }
+
+    /// <summary>Gets the requested version.</summary>
+    public string RequestedVersion { get; }
 }

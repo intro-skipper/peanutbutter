@@ -50,6 +50,14 @@
                 </section>
 
                 <div id="PeanutButterResult" class="peanutButterStatus" role="status" aria-live="polite" hidden></div>
+                <div id="PeanutButterConfirmation" class="peanutButterConfirmation" role="alert" hidden>
+                    <strong>Install older version?</strong>
+                    <p id="PeanutButterConfirmationMessage"></p>
+                    <div class="peanutButterConfirmationActions">
+                        <button id="PeanutButterConfirm" is="emby-button" type="button" class="raised">Install older version</button>
+                        <button id="PeanutButterCancel" is="emby-button" type="button" class="button-flat">Cancel</button>
+                    </div>
+                </div>
             </div>
         </div>
         <style>
@@ -255,6 +263,35 @@
                 border-color: #eb5757;
             }
 
+            .peanutButterStatus[data-state="warning"] {
+                border-color: #f2c94c;
+            }
+
+            .peanutButterConfirmation {
+                background: rgba(242, 201, 76, .08);
+                border: 1px solid #f2c94c;
+                border-radius: .65rem;
+                margin-top: 1rem;
+                padding: 1rem;
+            }
+
+            .peanutButterConfirmation strong {
+                display: block;
+                margin-bottom: .35rem;
+            }
+
+            .peanutButterConfirmation p {
+                margin: 0;
+                opacity: .8;
+            }
+
+            .peanutButterConfirmationActions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: .75rem;
+                margin-top: 1rem;
+            }
+
             @keyframes peanutButterSpin {
                 to { transform: rotate(360deg); }
             }
@@ -274,11 +311,20 @@
                 var fileName = document.querySelector('#PluginFileName');
                 var submitButton = document.querySelector('#PeanutButterSubmit');
                 var result = document.querySelector('#PeanutButterResult');
+                var confirmation = document.querySelector('#PeanutButterConfirmation');
+                var confirmationMessage = document.querySelector('#PeanutButterConfirmationMessage');
+                var confirmButton = document.querySelector('#PeanutButterConfirm');
+                var cancelButton = document.querySelector('#PeanutButterCancel');
 
                 function setResult(message, state) {
                     result.textContent = message || '';
                     result.dataset.state = state || '';
                     result.hidden = !message;
+                }
+
+                function setConfirmation(message, visible) {
+                    confirmationMessage.textContent = message || '';
+                    confirmation.hidden = !visible;
                 }
 
                 function showFileName() {
@@ -361,11 +407,15 @@
 
                 page.addEventListener('pageshow', function () {
                     setResult('');
+                    setConfirmation('', false);
                     fileInput.value = '';
                     showFileName();
                 });
 
-                fileInput.addEventListener('change', showFileName);
+                fileInput.addEventListener('change', function () {
+                    setConfirmation('', false);
+                    showFileName();
+                });
                 dropZone.addEventListener('click', function (event) {
                     if (event.target !== fileInput) {
                         event.preventDefault();
@@ -394,16 +444,16 @@
                 });
                 dropZone.addEventListener('drop', function (event) {
                     if (event.dataTransfer.files.length) {
+                        setConfirmation('', false);
                         fileInput.files = event.dataTransfer.files;
                         showFileName();
                     }
                 });
 
-                form.addEventListener('submit', function (event) {
-                    event.preventDefault();
+                function installPlugin(confirmOlderVersion) {
                     if (!fileInput.files.length) {
                         setResult('Choose a ZIP or DLL file first.', 'error');
-                        return false;
+                        return;
                     }
 
                     var data = new FormData();
@@ -413,7 +463,12 @@
                     Dashboard.showLoadingMsg();
                     setResult('Installing plugin...', 'pending');
 
-                    fetch(ApiClient.getUrl('Plugins/PeanutButter/Install'), {
+                    var installUrl = ApiClient.getUrl('Plugins/PeanutButter/Install');
+                    if (confirmOlderVersion) {
+                        installUrl += (installUrl.indexOf('?') >= 0 ? '&' : '?') + 'confirmOlderVersion=true';
+                    }
+
+                    fetch(installUrl, {
                         method: 'POST',
                         headers: {
                             Accept: 'application/json',
@@ -423,6 +478,32 @@
                         body: data
                     }).then(function (response) {
                         if (!response.ok) {
+                            if (response.status === 409) {
+                                return response.clone().json().then(function (payload) {
+                                    var extensions = payload.extensions || payload.Extensions || {};
+                                    var requiresConfirmation = payload.requiresConfirmation
+                                        || payload.RequiresConfirmation
+                                        || extensions.requiresConfirmation
+                                        || extensions.RequiresConfirmation;
+                                    if (requiresConfirmation) {
+                                        var downgradeError = new Error(
+                                            payload.detail
+                                            || payload.Detail
+                                            || 'The uploaded plugin is older than the installed version.');
+                                        downgradeError.requiresConfirmation = true;
+                                        throw downgradeError;
+                                    }
+
+                                    throw response;
+                                }).catch(function (error) {
+                                    if (error && error.requiresConfirmation) {
+                                        throw error;
+                                    }
+
+                                    throw response;
+                                });
+                            }
+
                             throw response;
                         }
 
@@ -432,9 +513,16 @@
                         var name = response.Name || response.name || 'plugin';
                         var version = response.Version || response.version || 'unknown version';
                         setResult(action + ' ' + name + ' ' + version + '. The files are on disk; restart Jellyfin to load the replacement.', 'success');
+                        setConfirmation('', false);
                         fileInput.value = '';
                         showFileName();
                     }).catch(function (error) {
+                        if (error && error.requiresConfirmation) {
+                            setResult('Installation paused. Confirmation is required to install an older version.', 'warning');
+                            setConfirmation(error.message, true);
+                            return;
+                        }
+
                         Promise.resolve(getErrorMessage(error)).then(function (message) {
                             setResult('Install failed: ' + message, 'error');
                         });
@@ -443,6 +531,21 @@
                         dropZone.classList.remove('pluginDropZoneBusy');
                         Dashboard.hideLoadingMsg();
                     });
+                }
+
+                confirmButton.addEventListener('click', function () {
+                    setConfirmation('', false);
+                    installPlugin(true);
+                });
+
+                cancelButton.addEventListener('click', function () {
+                    setConfirmation('', false);
+                    setResult('The older version was not installed.', 'warning');
+                });
+
+                form.addEventListener('submit', function (event) {
+                    event.preventDefault();
+                    installPlugin(false);
                     return false;
                 });
             }());

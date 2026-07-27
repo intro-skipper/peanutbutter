@@ -18,6 +18,12 @@ Supported uploads:
 
 Manifestless updates retain the installed plugin manifest and supporting files while replacing the uploaded assembly. ZIP archives with their own `meta.json` are installed as complete packages.
 
+Version handling follows Jellyfin's plugin update layout:
+
+- A newer version is installed in a new versioned plugin folder.
+- The same version replaces the existing plugin folder.
+- An older version requires explicit confirmation before it replaces the installed version.
+
 DLLs are checked for a public concrete implementation of Jellyfin's `IPlugin` interface, and all assembly types must load successfully against Jellyfin 12. These checks verify compatibility and structure; they are not malware scanning.
 
 The API endpoint is:
@@ -27,6 +33,8 @@ POST /Plugins/PeanutButter/Install
 ```
 
 Send the file as a multipart form field named `file` using an authenticated administrator request.
+
+To explicitly approve an older version, retry the request with `?confirmOlderVersion=true`.
 
 ## Limits
 
