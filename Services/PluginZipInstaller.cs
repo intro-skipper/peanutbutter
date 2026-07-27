@@ -677,21 +677,29 @@ public sealed partial class PluginZipInstaller
         }
         catch (ReflectionTypeLoadException exception)
         {
+            types = exception.Types
+                .Where(type => type is not null)
+                .Cast<Type>()
+                .ToArray();
+
+            if (ContainsPluginType(types))
+            {
+                return new DirectAssemblyInfo(
+                    assemblyName.Name ?? Path.GetFileNameWithoutExtension(path),
+                    assemblyName.Version?.ToString() ?? "0.0.0.0");
+            }
+
             var loaderErrors = string.Join(
                 "; ",
                 exception.LoaderExceptions
                     .Where(error => error is not null)
                     .Select(error => error!.Message));
             throw new PluginArchiveException(
-                $"The DLL could not be inspected because one or more dependencies are missing: {loaderErrors}",
+                $"The DLL could not be inspected because no loadable type implements Jellyfin's IPlugin interface. Type load errors: {loaderErrors}",
                 exception);
         }
 
-        if (!types.Any(type =>
-                type.IsClass
-                && !type.IsAbstract
-                && type.IsPublic
-                && typeof(IPlugin).IsAssignableFrom(type)))
+        if (!ContainsPluginType(types))
         {
             throw new PluginArchiveException(
                 "The DLL does not contain a public concrete type implementing Jellyfin's IPlugin interface.");
@@ -701,6 +709,13 @@ public sealed partial class PluginZipInstaller
             assemblyName.Name ?? Path.GetFileNameWithoutExtension(path),
             assemblyName.Version?.ToString() ?? "0.0.0.0");
     }
+
+    private static bool ContainsPluginType(IEnumerable<Type> types)
+        => types.Any(type =>
+            type.IsClass
+            && !type.IsAbstract
+            && type.IsPublic
+            && typeof(IPlugin).IsAssignableFrom(type));
 
     private void TryDeleteFile(string path)
     {
