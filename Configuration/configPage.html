@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Peanut Butter Plugin Installer</title>
+</head>
+<body>
+    <div id="PeanutButterConfigPage" data-role="page" class="page type-interior pluginConfigurationPage">
+        <div data-role="content">
+            <div class="content-primary">
+                <h1>Peanut Butter Plugin Installer</h1>
+                <p>Upload a Jellyfin plugin ZIP or DLL to install it or replace its currently installed version.</p>
+                <p class="fieldDescription">Only administrators can use this page. A server restart is required after every successful install or update.</p>
+
+                <form id="PeanutButterForm" enctype="multipart/form-data">
+                    <div id="PluginDropZone" class="pluginDropZone" role="button" tabindex="0" aria-controls="PluginFile" aria-label="Choose a plugin ZIP or DLL">
+                        <input id="PluginFile" name="file" type="file" accept=".zip,.dll,application/zip,application/octet-stream" required>
+                        <div class="pluginDropZoneTitle">Drop a plugin ZIP or DLL here</div>
+                        <div class="pluginDropZoneHint">or click to choose a file</div>
+                        <div id="PluginFileName" class="pluginDropZoneFileName"></div>
+                    </div>
+                    <button is="emby-button" type="submit" class="raised button-submit block">
+                        <span>Install plugin</span>
+                    </button>
+                </form>
+                <div id="PeanutButterResult" class="fieldDescription" role="status" aria-live="polite"></div>
+            </div>
+        </div>
+        <style>
+            .pluginDropZone {
+                border: 2px dashed rgba(255, 255, 255, .35);
+                border-radius: .4em;
+                cursor: pointer;
+                margin: 1.5em 0;
+                padding: 2.5em 1em;
+                text-align: center;
+                transition: border-color .15s ease, background-color .15s ease;
+            }
+
+            .pluginDropZone:hover,
+            .pluginDropZone:focus-visible,
+            .pluginDropZone.pluginDropZoneActive {
+                background-color: rgba(255, 255, 255, .08);
+                border-color: var(--theme-primary-color);
+                outline: none;
+            }
+
+            .pluginDropZone input {
+                height: 1px;
+                opacity: 0;
+                position: absolute;
+                width: 1px;
+            }
+
+            .pluginDropZoneTitle {
+                font-size: 1.15em;
+                font-weight: 500;
+            }
+
+            .pluginDropZoneHint,
+            .pluginDropZoneFileName {
+                margin-top: .5em;
+                opacity: .75;
+            }
+        </style>
+        <script type="text/javascript">
+            (function () {
+                var page = document.querySelector('#PeanutButterConfigPage');
+                var form = document.querySelector('#PeanutButterForm');
+                var dropZone = document.querySelector('#PluginDropZone');
+                var fileInput = document.querySelector('#PluginFile');
+                var fileName = document.querySelector('#PluginFileName');
+                var result = document.querySelector('#PeanutButterResult');
+
+                function showFileName() {
+                    fileName.textContent = fileInput.files.length ? fileInput.files[0].name : '';
+                }
+
+                page.addEventListener('pageshow', function () {
+                    result.textContent = '';
+                    fileInput.value = '';
+                    showFileName();
+                });
+
+                fileInput.addEventListener('change', showFileName);
+                dropZone.addEventListener('click', function (event) {
+                    if (event.target !== fileInput) {
+                        fileInput.click();
+                    }
+                });
+                dropZone.addEventListener('keydown', function (event) {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        fileInput.click();
+                    }
+                });
+                ['dragenter', 'dragover'].forEach(function (eventName) {
+                    dropZone.addEventListener(eventName, function (event) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        dropZone.classList.add('pluginDropZoneActive');
+                    });
+                });
+                ['dragleave', 'drop'].forEach(function (eventName) {
+                    dropZone.addEventListener(eventName, function (event) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        dropZone.classList.remove('pluginDropZoneActive');
+                    });
+                });
+                dropZone.addEventListener('drop', function (event) {
+                    if (event.dataTransfer.files.length) {
+                        fileInput.files = event.dataTransfer.files;
+                        showFileName();
+                    }
+                });
+
+                form.addEventListener('submit', function (event) {
+                    event.preventDefault();
+                    if (!fileInput.files.length) {
+                        result.textContent = 'Choose a ZIP file first.';
+                        return false;
+                    }
+
+                    var data = new FormData();
+                    data.append('file', fileInput.files[0]);
+                    Dashboard.showLoadingMsg();
+                    result.textContent = '';
+
+                    ApiClient.ajax({
+                        type: 'POST',
+                        url: ApiClient.getUrl('Plugins/PeanutButter/Install'),
+                        data: data,
+                        processData: false,
+                        contentType: false,
+                        dataType: 'json'
+                    }).then(function (response) {
+                        result.textContent = response.Action + ' ' + response.Name + ' ' + response.Version + '. Restart Jellyfin to load it.';
+                        fileInput.value = '';
+                        showFileName();
+                    }).catch(function (error) {
+                        var response = error.responseJSON || {};
+                        result.textContent = 'Install failed: ' + (response.detail || response.Detail || error.statusText || 'unknown error');
+                    }).finally(function () {
+                        Dashboard.hideLoadingMsg();
+                    });
+                    return false;
+                });
+            }());
+        </script>
+    </div>
+</body>
+</html>

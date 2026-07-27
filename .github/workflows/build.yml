@@ -1,0 +1,72 @@
+name: Build Plugin
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  PROJECT: Jellyfin.Plugin.PeanutButter.csproj
+  PLUGIN_NAME: Jellyfin.Plugin.PeanutButter
+  PLUGIN_GUID: d6f8f4f2-65c9-4ebc-a3a8-4b5b7b0e6f59
+  PLUGIN_VERSION: 1.0.0.0
+  TARGET_ABI: 10.11.0.0
+
+jobs:
+  build:
+    name: Build and package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore "${{ env.PROJECT }}"
+
+      - name: Publish
+        run: >-
+          dotnet publish "${{ env.PROJECT }}"
+          --configuration Release
+          --no-restore
+          --output "${{ runner.temp }}/publish"
+          --property:DebugType=None
+          --property:DebugSymbols=false
+
+      - name: Assemble Jellyfin package
+        shell: pwsh
+        run: |
+          $packageRoot = Join-Path $env:RUNNER_TEMP 'package'
+          New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
+          Copy-Item (Join-Path $env:RUNNER_TEMP 'publish/*') $packageRoot -Recurse -Force
+          $metadata = [ordered]@{
+            guid = $env:PLUGIN_GUID
+            name = 'Peanut Butter Plugin Installer'
+            version = $env:PLUGIN_VERSION
+            targetAbi = $env:TARGET_ABI
+            status = 'Active'
+            autoUpdate = $false
+            assemblies = @("$($env:PLUGIN_NAME).dll")
+          }
+          $metadata | ConvertTo-Json -Depth 3 | Set-Content (Join-Path $packageRoot 'meta.json') -Encoding utf8
+          $zipPath = Join-Path $env:GITHUB_WORKSPACE "$($env:PLUGIN_NAME)_$($env:PLUGIN_VERSION).zip"
+          Compress-Archive -Path (Join-Path $packageRoot '*') -DestinationPath $zipPath -Force
+          "PACKAGE_PATH=$zipPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload plugin ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Jellyfin.Plugin.PeanutButter
+          path: Jellyfin.Plugin.PeanutButter_1.0.0.0.zip
+          if-no-files-found: error
+          retention-days: 14

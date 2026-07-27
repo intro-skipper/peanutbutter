@@ -1,0 +1,16 @@
+name: "Peanut Butter Plugin Installer"
+guid: "d6f8f4f2-65c9-4ebc-a3a8-4b5b7b0e6f59"
+version: 1
+targetAbi: "10.11.0.0"
+framework: "net9.0"
+owner: "peanutbutter"
+overview: "Install and update Jellyfin plugins from ZIP files or DLLs over the network."
+description: >
+  Installs Jellyfin plugin ZIP archives and verified standalone DLLs through an
+  authenticated administrator-only endpoint. Existing plugins are replaced in
+  place and new plugins receive their own folder in Jellyfin's plugin directory.
+category: "Administration"
+artifacts:
+  - "Jellyfin.Plugin.PeanutButter.dll"
+changelog: >
+  Initial release.
