@@ -698,6 +698,13 @@ public sealed partial class PluginZipInstaller
             assemblyName.Version?.ToString() ?? "0.0.0.0");
     }
 
+    private static bool ContainsPluginType(IEnumerable<Type> types)
+        => types.Any(type =>
+            type.IsClass
+            && !type.IsAbstract
+            && type.IsPublic
+            && typeof(IPlugin).IsAssignableFrom(type));
+
     private void TryDeleteFile(string path)
     {
         try
