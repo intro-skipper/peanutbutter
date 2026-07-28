@@ -9,12 +9,12 @@
         "imageUrl": "https://raw.githubusercontent.com/intro-skipper/peanutbutter/main/images/logo.png",
         "versions": [
             {
-                "version": "0.1.2.32",
-                "changelog": "- See the commit [4396d82](https://github.com/intro-skipper/peanutbutter/commit/4396d82db20b48731de283bb5ba90c5caa01f00d)",
+                "version": "0.1.2.33",
+                "changelog": "- See the commit [7b198c5](https://github.com/intro-skipper/peanutbutter/commit/7b198c5921586de9fd0cf57b282aaa5643769b73)",
                 "targetAbi": "12.0.0.0",
-                "sourceUrl": "https://github.com/intro-skipper/peanutbutter/releases/download/beta-4396d82-32/Jellyfin.Plugin.PeanutButter-beta-4396d82-32.zip",
-                "checksum": "01b30f920204338d9398b6fa0ed428fc",
-                "timestamp": "2026-07-28T21:39:38Z"
+                "sourceUrl": "https://github.com/intro-skipper/peanutbutter/releases/download/beta-7b198c5-33/Jellyfin.Plugin.PeanutButter-beta-7b198c5-33.zip",
+                "checksum": "f688eabaf59007e8eeaec3d6fc7409ff",
+                "timestamp": "2026-07-28T21:46:05Z"
             }
         ]
     }
