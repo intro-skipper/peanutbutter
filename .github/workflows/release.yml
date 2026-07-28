@@ -39,8 +39,8 @@ jobs:
           if not match:
               raise SystemExit("Could not parse <Version> in Directory.Build.props")
 
-          major, minor, patch, revision = match.groups()
-          new_version = f"{major}.{minor}.{int(patch) + 1}.{revision}"
+          major, minor, patch, _ = match.groups()
+          new_version = f"{major}.{minor}.{int(patch) + 1}.0"
           for tag in ("Version", "AssemblyVersion", "FileVersion"):
               content, count = re.subn(
                   rf"<{tag}>\d+\.\d+\.\d+\.\d+</{tag}>",
