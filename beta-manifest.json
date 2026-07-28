@@ -7,6 +7,15 @@
         "owner": "Peanut Butter",
         "category": "Administration",
         "imageUrl": "https://raw.githubusercontent.com/intro-skipper/peanutbutter/main/images/logo.png",
-        "versions": []
+        "versions": [
+            {
+                "version": "0.1.1.25",
+                "changelog": "- See the commit [ffe0c55](https://github.com/intro-skipper/peanutbutter/commit/ffe0c55098686d9c41a3814308e092d7af101111)",
+                "targetAbi": "12.0.0.0",
+                "sourceUrl": "https://github.com/intro-skipper/peanutbutter/releases/download/beta-ffe0c55-25/Jellyfin.Plugin.PeanutButter-beta-ffe0c55-25.zip",
+                "checksum": "98cf07811f6d5ec36a5faafc9b031715",
+                "timestamp": "2026-07-28T01:40:47Z"
+            }
+        ]
     }
 ]
