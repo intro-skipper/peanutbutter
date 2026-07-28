@@ -6,7 +6,7 @@
         <img alt="Plugin Banner" src="https://raw.githubusercontent.com/intro-skipper/peanutbutter/main/images/logo.png" />
     </p>
     <p>
-        Peanut Butter and Jellyfin. All the flavor with no allergy risk.
+        All the flavor with no allergy risk.
     </p>
 </div>
 
