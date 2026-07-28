@@ -107,6 +107,7 @@ jobs:
           with open("release-package/meta.json", "w", encoding="utf-8", newline="\n") as file:
               json.dump(metadata, file, indent=2)
               file.write("\n")
+          PY
           zip -j "Jellyfin.Plugin.PeanutButter-${{ env.RELEASE_TAG }}.zip" \
             release-package/*
 
