@@ -13,7 +13,7 @@ Peanut Butter is a Jellyfin 12 plugin installer for administrators. It installs 
 
 Open **Dashboard → Plugins → Peanut Butter**, then drop a plugin ZIP or DLL onto the upload area, or click it to select a file.
 
-Restart Jellyfin after every successful installation or update. This applies to same-version replacements as well.
+Restart Jellyfin after every successful installation or update. The installer page provides a **Restart Jellyfin now** button, so you do not need to return to the dashboard. This applies to same-version replacements as well.
 
 Supported uploads:
 

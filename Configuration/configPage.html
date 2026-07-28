@@ -57,6 +57,15 @@
                 </section>
 
                 <div id="PeanutButterResult" class="peanutButterStatus" role="status" aria-live="polite" hidden></div>
+                <div id="PeanutButterRestartAction" class="peanutButterRestartAction" hidden>
+                    <div class="peanutButterRestartCopy">
+                        <strong>Restart required</strong>
+                        <span id="PeanutButterRestartStatus" class="peanutButterRestartStatus">Restart to load the installed plugin.</span>
+                    </div>
+                    <button id="PeanutButterRestartButton" is="emby-button" type="button" class="raised">
+                        <span>Restart Jellyfin now</span>
+                    </button>
+                </div>
                 <div id="PeanutButterConfirmation" class="peanutButterConfirmation" role="alert" hidden>
                     <strong>Install older version?</strong>
                     <p id="PeanutButterConfirmationMessage"></p>
@@ -98,6 +107,15 @@
                     </div>
 
                     <div id="GitHubResult" class="peanutButterStatus" role="status" aria-live="polite" hidden></div>
+                    <div id="GitHubRestartAction" class="peanutButterRestartAction" hidden>
+                        <div class="peanutButterRestartCopy">
+                            <strong>Restart required</strong>
+                            <span id="GitHubRestartStatus" class="peanutButterRestartStatus">Restart to load the installed plugin.</span>
+                        </div>
+                        <button id="GitHubRestartButton" is="emby-button" type="button" class="raised">
+                            <span>Restart Jellyfin now</span>
+                        </button>
+                    </div>
                     <div id="GitHubConfirmation" class="peanutButterConfirmation" role="alert" hidden>
                         <strong>Install older version?</strong>
                         <p id="GitHubConfirmationMessage"></p>
@@ -377,6 +395,40 @@
                 border-color: #f2c94c;
             }
 
+            .peanutButterRestartAction {
+                align-items: center;
+                background: rgba(111, 207, 151, .08);
+                border: 1px solid #6fcf97;
+                border-radius: .65rem;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 1rem;
+                justify-content: space-between;
+                margin-top: .75rem;
+                padding: .9rem 1rem;
+            }
+
+            .peanutButterRestartCopy {
+                display: flex;
+                flex: 1 1 14rem;
+                flex-direction: column;
+                gap: .25rem;
+                line-height: 1.4;
+            }
+
+            .peanutButterRestartCopy span {
+                font-size: .85rem;
+                opacity: .78;
+            }
+
+            .peanutButterRestartStatus[data-state="pending"] {
+                color: var(--theme-primary-color);
+            }
+
+            .peanutButterRestartStatus[data-state="error"] {
+                color: #eb5757;
+            }
+
             .peanutButterConfirmation {
                 background: rgba(242, 201, 76, .08);
                 border: 1px solid #f2c94c;
@@ -546,6 +598,15 @@
                 .peanutButterCardHeader {
                     flex-direction: column;
                 }
+
+                .peanutButterRestartAction {
+                    align-items: stretch;
+                    flex-direction: column;
+                }
+
+                .peanutButterRestartAction button {
+                    width: 100%;
+                }
             }
         </style>
         <script type="text/javascript">
@@ -558,6 +619,9 @@
                 var fileName = document.querySelector('#PluginFileName');
                 var submitButton = document.querySelector('#PeanutButterSubmit');
                 var result = document.querySelector('#PeanutButterResult');
+                var restartAction = document.querySelector('#PeanutButterRestartAction');
+                var restartButton = document.querySelector('#PeanutButterRestartButton');
+                var restartStatus = document.querySelector('#PeanutButterRestartStatus');
                 var confirmation = document.querySelector('#PeanutButterConfirmation');
                 var confirmationMessage = document.querySelector('#PeanutButterConfirmationMessage');
                 var confirmButton = document.querySelector('#PeanutButterConfirm');
@@ -567,6 +631,37 @@
                     result.textContent = message || '';
                     result.dataset.state = state || '';
                     result.hidden = !message;
+                }
+
+                function resetRestartAction(action, button, status) {
+                    action.hidden = true;
+                    button.disabled = false;
+                    status.textContent = 'Restart to load the installed plugin.';
+                    status.dataset.state = '';
+                }
+
+                function showRestartAction(action, button, status) {
+                    action.hidden = false;
+                    button.disabled = false;
+                    status.textContent = 'Restart to load the installed plugin.';
+                    status.dataset.state = '';
+                }
+
+                function restartServer(button, status) {
+                    button.disabled = true;
+                    status.dataset.state = 'pending';
+                    status.textContent = 'Requesting restart...';
+
+                    requestJson('POST', 'System/Restart').then(function () {
+                        status.dataset.state = 'success';
+                        status.textContent = 'Restart requested.';
+                    }).catch(function (error) {
+                        Promise.resolve(getErrorMessage(error)).then(function (message) {
+                            button.disabled = false;
+                            status.dataset.state = 'error';
+                            status.textContent = 'Restart failed: ' + message;
+                        });
+                    });
                 }
 
                 function setConfirmation(message, visible) {
@@ -654,6 +749,7 @@
 
                 page.addEventListener('pageshow', function () {
                     setResult('');
+                    resetRestartAction(restartAction, restartButton, restartStatus);
                     setConfirmation('', false);
                     fileInput.value = '';
                     urlInput.value = '';
@@ -712,6 +808,7 @@
                 function installPlugin(confirmOlderVersion) {
                     var sourceUrl = urlInput.value.trim();
                     var hasFile = fileInput.files.length > 0;
+                    resetRestartAction(restartAction, restartButton, restartStatus);
                     if (!hasFile && !sourceUrl) {
                         setResult('Choose a ZIP or DLL file, or enter a plugin URL.', 'error');
                         return;
@@ -782,7 +879,8 @@
                         var action = response.Action || response.action || 'Installed';
                         var name = response.Name || response.name || 'plugin';
                         var version = response.Version || response.version || 'unknown version';
-                        setResult(action + ' ' + name + ' ' + version + '. The files are on disk; restart Jellyfin to load the replacement.', 'success');
+                        setResult(action + ' ' + name + ' ' + version + '.', 'success');
+                        showRestartAction(restartAction, restartButton, restartStatus);
                         setConfirmation('', false);
                         fileInput.value = '';
                         urlInput.value = '';
@@ -814,6 +912,10 @@
                     setResult('The older version was not installed.', 'warning');
                 });
 
+                restartButton.addEventListener('click', function () {
+                    restartServer(restartButton, restartStatus);
+                });
+
                 form.addEventListener('submit', function (event) {
                     event.preventDefault();
                     installPlugin(false);
@@ -830,6 +932,9 @@
                 var githubAssetList = document.querySelector('#GitHubAssetList');
                 var githubInstallButton = document.querySelector('#GitHubInstallButton');
                 var githubResult = document.querySelector('#GitHubResult');
+                var githubRestartAction = document.querySelector('#GitHubRestartAction');
+                var githubRestartButton = document.querySelector('#GitHubRestartButton');
+                var githubRestartStatus = document.querySelector('#GitHubRestartStatus');
                 var githubConfirmation = document.querySelector('#GitHubConfirmation');
                 var githubConfirmationMessage = document.querySelector('#GitHubConfirmationMessage');
                 var githubConfirmButton = document.querySelector('#GitHubConfirm');
@@ -1041,6 +1146,7 @@
                         return;
                     }
 
+                    resetRestartAction(githubRestartAction, githubRestartButton, githubRestartStatus);
                     githubInstallButton.disabled = true;
                     githubFetchButton.disabled = true;
                     Dashboard.showLoadingMsg();
@@ -1057,13 +1163,9 @@
                         var action = pick(install, 'action') || 'Installed';
                         var name = pick(install, 'name') || 'plugin';
                         var version = pick(install, 'version') || 'unknown version';
-                        var digestNote = pick(response, 'digestVerified')
-                            ? ' Digest verified.'
-                            : ' GitHub published no digest for this asset.';
-                        setGitHubResult(
-                            action + ' ' + name + ' ' + version + '.' + digestNote
-                            + ' Restart Jellyfin to load the plugin.',
-                            'success');
+                        var digestNote = pick(response, 'digestVerified') ? ' SHA-256 verified.' : '';
+                        setGitHubResult(action + ' ' + name + ' ' + version + '.' + digestNote, 'success');
+                        showRestartAction(githubRestartAction, githubRestartButton, githubRestartStatus);
                         setGitHubConfirmation('', false);
                         loadGitHubSources();
                     }).catch(function (error) {
@@ -1231,6 +1333,9 @@
                     setGitHubConfirmation('', false);
                     setGitHubResult('The older version was not installed.', 'warning');
                 });
+                githubRestartButton.addEventListener('click', function () {
+                    restartServer(githubRestartButton, githubRestartStatus);
+                });
                 githubRepoInput.addEventListener('keydown', function (event) {
                     if (event.key === 'Enter') {
                         event.preventDefault();
@@ -1246,6 +1351,7 @@
 
                 page.addEventListener('pageshow', function () {
                     setGitHubResult('');
+                    resetRestartAction(githubRestartAction, githubRestartButton, githubRestartStatus);
                     setGitHubConfirmation('', false);
                     githubReleasePanel.hidden = true;
                     githubRelease = null;
