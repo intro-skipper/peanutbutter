@@ -38,16 +38,38 @@ public sealed partial class PluginZipInstaller
     /// Initializes a new instance of the <see cref="PluginZipInstaller"/> class.
     /// </summary>
     /// <param name="pluginsPath">The Jellyfin plugin directory.</param>
+    /// <param name="stagingPath">
+    /// The directory used to stage uploads and to hold the backup of a replaced plugin. It must live
+    /// outside <paramref name="pluginsPath"/>: Jellyfin's plugin discovery enumerates every top-level
+    /// folder under the plugin directory and searches it recursively for DLLs, so a staging folder kept
+    /// inside it is loaded as a bogus plugin whenever a backup or a partial upload is left behind.
+    /// </param>
     /// <param name="logger">The logger.</param>
-    public PluginZipInstaller(string pluginsPath, ILogger<PluginZipInstaller> logger)
+    /// <exception cref="ArgumentException">
+    /// Thrown when either path is blank, or when <paramref name="stagingPath"/> resolves to a location
+    /// inside <paramref name="pluginsPath"/>.
+    /// </exception>
+    public PluginZipInstaller(string pluginsPath, string stagingPath, ILogger<PluginZipInstaller> logger)
     {
         if (string.IsNullOrWhiteSpace(pluginsPath))
         {
             throw new ArgumentException("The plugin directory is required.", nameof(pluginsPath));
         }
 
+        if (string.IsNullOrWhiteSpace(stagingPath))
+        {
+            throw new ArgumentException("The staging directory is required.", nameof(stagingPath));
+        }
+
         _pluginsPath = Path.GetFullPath(pluginsPath);
-        _stagingPath = Path.Combine(_pluginsPath, ".plugin-installer-staging");
+        _stagingPath = Path.GetFullPath(stagingPath);
+        if (IsInsideDirectory(_pluginsPath, _stagingPath))
+        {
+            throw new ArgumentException(
+                "The staging directory must not be inside the plugin directory, because Jellyfin would discover it as a plugin.",
+                nameof(stagingPath));
+        }
+
         _logger = logger;
     }
 
@@ -148,7 +170,7 @@ public sealed partial class PluginZipInstaller
 
             if (!string.IsNullOrEmpty(movedExistingPath))
             {
-                Directory.Delete(movedExistingPath, recursive: true);
+                TryDeleteBackupDirectory(movedExistingPath);
             }
 
             LogPluginInstalled(
@@ -321,7 +343,7 @@ public sealed partial class PluginZipInstaller
             newDirectoryMoved = true;
             if (!string.IsNullOrEmpty(movedExistingPath))
             {
-                Directory.Delete(movedExistingPath, recursive: true);
+                TryDeleteBackupDirectory(movedExistingPath);
             }
 
             LogStandalonePluginInstalled(
@@ -778,14 +800,18 @@ public sealed partial class PluginZipInstaller
 
     private static void EnsureWithinDirectory(string directory, string path)
     {
-        var fullDirectory = Path.GetFullPath(directory)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            + Path.DirectorySeparatorChar;
-        var fullPath = Path.GetFullPath(path);
-        if (!fullPath.StartsWith(fullDirectory, StringComparison.OrdinalIgnoreCase))
+        if (!IsInsideDirectory(directory, path))
         {
             throw new PluginArchiveException("The archive contains a path outside the plugin directory.");
         }
+    }
+
+    private static bool IsInsideDirectory(string directory, string path)
+    {
+        var fullDirectory = Path.GetFullPath(directory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        return Path.GetFullPath(path).StartsWith(fullDirectory, StringComparison.OrdinalIgnoreCase);
     }
 
     internal static string NormalizeArchivePath(string path)
@@ -1021,6 +1047,32 @@ public sealed partial class PluginZipInstaller
         }
     }
 
+    /// <summary>
+    /// Removes the backup of a replaced plugin on a best-effort basis.
+    /// </summary>
+    /// <remarks>
+    /// This runs only after the replacement is already in place and verified, so a failure here does not
+    /// affect the installed plugin and must never surface as an install error. Jellyfin keeps the previous
+    /// version's assemblies loaded until it restarts, and Windows refuses to delete a loaded assembly, so
+    /// this legitimately fails on every in-place update of an active plugin. The leftover is left in the
+    /// staging directory, which lives outside the plugin directory and so is not discovered as a plugin.
+    /// </remarks>
+    /// <param name="path">The staged backup directory.</param>
+    private void TryDeleteBackupDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            LogBackupDeleteFailure(_logger, exception, path);
+        }
+    }
+
     private sealed record ExistingPlugin(string FullPath, Version Version);
 
     private sealed record PluginArchiveInfo(
@@ -1112,6 +1164,9 @@ public sealed partial class PluginZipInstaller
 
     [LoggerMessage(EventId = 1008, Level = LogLevel.Warning, Message = "Unable to remove temporary directory {TemporaryPath}")]
     private static partial void LogTemporaryDirectoryDeleteFailure(ILogger logger, Exception exception, string temporaryPath);
+
+    [LoggerMessage(EventId = 1009, Level = LogLevel.Warning, Message = "The plugin was installed, but the previous version staged at {BackupPath} could not be removed. This is expected while Jellyfin still has the previous version loaded; the folder can be deleted after the next restart.")]
+    private static partial void LogBackupDeleteFailure(ILogger logger, Exception exception, string backupPath);
 }
 
 /// <summary>

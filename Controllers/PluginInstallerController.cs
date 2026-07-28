@@ -37,6 +37,7 @@ public sealed partial class PluginInstallerController : ControllerBase
         _httpClientFactory = httpClientFactory;
         _installer = new PluginZipInstaller(
             applicationPaths.PluginsPath,
+            Path.Combine(applicationPaths.TempDirectory, "peanutbutter-installer-staging"),
             loggerFactory.CreateLogger<PluginZipInstaller>());
     }
 
