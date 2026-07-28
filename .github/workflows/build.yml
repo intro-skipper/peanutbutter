@@ -8,6 +8,9 @@ on:
       - "**/README.md"
       - "docs/**"
       - "images/**"
+      - "manifest.json"
+      - "beta-manifest.json"
+      - "Directory.Build.props"
   pull_request:
     types:
       - opened
@@ -17,7 +20,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: peanut-butter-beta-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -50,3 +57,95 @@ jobs:
           name: "Jellyfin.Plugin.PeanutButter-${{ env.GIT_HASH }}.dll"
           path: bin/Release/net10.0/Jellyfin.Plugin.PeanutButter.dll
           if-no-files-found: error
+
+      - name: Read build metadata
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        run: |
+          BUILD_VERSION=$(python - <<'PY'
+          import re
+
+          with open("Directory.Build.props", "r", encoding="utf-8") as file:
+              content = file.read()
+          match = re.search(r"<Version>([^<]+)</Version>", content)
+          if not match:
+              raise SystemExit("Could not read <Version> from Directory.Build.props")
+          print(match.group(1))
+          PY
+          )
+          IFS='.' read -r VERSION_MAJOR VERSION_MINOR VERSION_PATCH _ <<< "${BUILD_VERSION}"
+          BUILD_VERSION="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}.${GITHUB_RUN_NUMBER}"
+          echo "BUILD_VERSION=${BUILD_VERSION}" >> "$GITHUB_ENV"
+          echo "BETA_TAG=beta-${GIT_HASH}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+
+      - name: Package beta artifact
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        run: |
+          mkdir -p beta-package
+          cp bin/Release/net10.0/Jellyfin.Plugin.PeanutButter.dll beta-package/
+          python - <<'PY'
+          import json
+          import os
+
+          metadata = {
+              "guid": "d6f8f4f2-65c9-4ebc-a3a8-4b5b7b0e6f59",
+              "name": "Peanut Butter",
+              "version": os.environ["BUILD_VERSION"],
+              "assemblies": ["Jellyfin.Plugin.PeanutButter.dll"],
+          }
+          with open("beta-package/meta.json", "w", encoding="utf-8", newline="\n") as file:
+              json.dump(metadata, file, indent=2)
+              file.write("\n")
+          PY
+          zip -j "Jellyfin.Plugin.PeanutButter-${BETA_TAG}.zip" beta-package/*
+
+      - name: Publish beta release
+        if: ${{ github.event_name == 'push' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          ASSET="Jellyfin.Plugin.PeanutButter-${BETA_TAG}.zip"
+          if gh release view "${BETA_TAG}" >/dev/null 2>&1; then
+            gh release upload "${BETA_TAG}" "$ASSET" --clobber
+          else
+            gh release create "${BETA_TAG}" "$ASSET" \
+              --title "Peanut Butter beta ${GIT_HASH}" \
+              --notes "Automated commit build for ${GITHUB_SHA}." \
+              --prerelease \
+              --target "${GITHUB_SHA}"
+          fi
+
+      - name: Update beta manifest
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        run: |
+          git fetch origin "${GITHUB_REF_NAME}"
+          git rebase "origin/${GITHUB_REF_NAME}"
+          ASSET="Jellyfin.Plugin.PeanutButter-${BETA_TAG}.zip"
+          SOURCE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${BETA_TAG}/${ASSET}"
+          CHECKSUM=$(md5sum "$ASSET" | awk '{ print $1 }')
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          python .github/scripts/update-manifest.py \
+            --manifest beta-manifest.json \
+            --version "${BUILD_VERSION}" \
+            --target-abi "12.0.0.0" \
+            --source-url "$SOURCE_URL" \
+            --checksum "$CHECKSUM" \
+            --timestamp "$TIMESTAMP" \
+            --changelog "- See the commit [${GITHUB_SHA:0:7}](https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA})"
+
+      - name: Commit beta manifest
+        if: ${{ github.event_name == 'push' }}
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add beta-manifest.json
+          if git diff --staged --quiet; then
+            echo "Beta manifest is already current."
+            exit 0
+          fi
+          git commit -m "chore: add beta build ${GIT_HASH} to manifest"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

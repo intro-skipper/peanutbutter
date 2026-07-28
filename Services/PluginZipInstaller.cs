@@ -28,6 +28,8 @@ public sealed partial class PluginZipInstaller
     private const int MaximumEntryCount = 10_000;
     private const long MaximumMetadataBytes = 1 * 1024 * 1024;
     private static readonly JsonSerializerOptions _metadataJsonOptions = new() { WriteIndented = true };
+    private static readonly string _installerAssemblyName =
+        typeof(PluginZipInstaller).Assembly.GetName().Name ?? "Jellyfin.Plugin.PeanutButter";
     private readonly string _pluginsPath;
     private readonly string _stagingPath;
     private readonly ILogger<PluginZipInstaller> _logger;
@@ -281,6 +283,8 @@ public sealed partial class PluginZipInstaller
                 throw new PluginArchiveException("The DLL does not have a usable assembly name.");
             }
 
+            RejectSelfInstall(assemblyInfo.AssemblyName, pluginId: null);
+
             var existingDirectory = FindExistingPlugin(archiveInfo);
             var versionComparison = existingDirectory is null
                 ? 1
@@ -511,6 +515,8 @@ public sealed partial class PluginZipInstaller
             throw lastVerificationFailure
                 ?? new PluginArchiveException("The archive does not contain a verifiable Jellyfin plugin DLL.");
         }
+
+        RejectSelfInstall(verifiedAssembly.AssemblyName, pluginId);
 
         var dllName = Path.GetFileNameWithoutExtension(dllPath);
         if (string.IsNullOrWhiteSpace(name))
@@ -878,6 +884,16 @@ public sealed partial class PluginZipInstaller
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
             }
+        }
+    }
+
+    private static void RejectSelfInstall(string assemblyName, Guid? pluginId)
+    {
+        if (pluginId == Plugin.PluginId
+            || string.Equals(assemblyName, _installerAssemblyName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new PluginArchiveException(
+                "Peanut Butter cannot install or update itself. Install other plugins with Peanut Butter, then restart Jellyfin before updating Peanut Butter.");
         }
     }
 

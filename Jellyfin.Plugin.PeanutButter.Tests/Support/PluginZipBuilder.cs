@@ -12,11 +12,18 @@ namespace Jellyfin.Plugin.PeanutButter.Tests.Support;
 public static class PluginZipBuilder
 {
     /// <summary>The file name of the valid plugin payload assembly.</summary>
-    public const string PluginDllName = "Jellyfin.Plugin.PeanutButter.dll";
+    public const string PluginDllName = "Jellyfin.Plugin.PeanutButter.Tests.dll";
+
+    /// <summary>The file name of the Peanut Butter assembly used by self-install tests.</summary>
+    public const string PeanutButterPluginDllName = "Jellyfin.Plugin.PeanutButter.dll";
 
     /// <summary>Gets the bytes of the compiled plugin assembly from the test output.</summary>
     public static byte[] PluginDllBytes { get; } = File.ReadAllBytes(
         Path.Combine(AppContext.BaseDirectory, PluginDllName));
+
+    /// <summary>Gets the actual Peanut Butter assembly for self-install rejection tests.</summary>
+    public static byte[] PeanutButterPluginDllBytes { get; } = File.ReadAllBytes(
+        Path.Combine(AppContext.BaseDirectory, PeanutButterPluginDllName));
 
     /// <summary>Gets the bytes of a managed assembly that is not a Jellyfin plugin.</summary>
     public static byte[] NonPluginDllBytes { get; } = File.ReadAllBytes(

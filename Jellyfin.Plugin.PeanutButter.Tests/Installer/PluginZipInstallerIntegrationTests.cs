@@ -305,6 +305,23 @@ public sealed class PluginZipInstallerIntegrationTests : IDisposable
         AssertStagingIsClean();
     }
 
+    [Fact]
+    public async Task InstallDllAsync_PeanutButterAssembly_Rejected()
+    {
+        using var stream = new MemoryStream(PluginZipBuilder.PeanutButterPluginDllBytes);
+
+        var exception = await Assert.ThrowsAsync<PluginArchiveException>(
+            () => _installer.InstallDllAsync(
+                stream,
+                PluginZipBuilder.PeanutButterPluginDllName,
+                stream.Length,
+                confirmOlderVersion: false,
+                TestContext.Current.CancellationToken));
+
+        Assert.Contains("cannot install or update itself", exception.Message, StringComparison.OrdinalIgnoreCase);
+        AssertStagingIsClean();
+    }
+
     private string SeedInstalledPlugin(string folderName, string version)
     {
         var directory = Path.Combine(_pluginsDirectory.Path, folderName);

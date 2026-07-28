@@ -1,0 +1,11 @@
+[
+    {
+        "guid": "d6f8f4f2-65c9-4ebc-a3a8-4b5b7b0e6f59",
+        "name": "Peanut Butter",
+        "overview": "Install and update Jellyfin plugins from ZIP files or DLLs over the network.",
+        "description": "Provides an administrator-only, staged installer for verified Jellyfin plugin ZIP archives and standalone DLLs.",
+        "owner": "Peanut Butter",
+        "category": "Administration",
+        "versions": []
+    }
+]

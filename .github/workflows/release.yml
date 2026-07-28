@@ -92,8 +92,23 @@ jobs:
 
       - name: Package release artifact
         run: |
+          mkdir -p release-package
+          cp bin/Release/net10.0/Jellyfin.Plugin.PeanutButter.dll release-package/
+          python - <<'PY'
+          import json
+          import os
+
+          metadata = {
+              "guid": "d6f8f4f2-65c9-4ebc-a3a8-4b5b7b0e6f59",
+              "name": "Peanut Butter",
+              "version": os.environ["NEW_VERSION"],
+              "assemblies": ["Jellyfin.Plugin.PeanutButter.dll"],
+          }
+          with open("release-package/meta.json", "w", encoding="utf-8", newline="\n") as file:
+              json.dump(metadata, file, indent=2)
+              file.write("\n")
           zip -j "Jellyfin.Plugin.PeanutButter-${{ env.RELEASE_TAG }}.zip" \
-            bin/Release/net10.0/Jellyfin.Plugin.PeanutButter.dll
+            release-package/*
 
       - name: Publish release
         env:
@@ -123,7 +138,27 @@ jobs:
           fi
 
       - name: Print MD5 Hash
-        run: md5sum "Jellyfin.Plugin.PeanutButter-${{ env.RELEASE_TAG }}.zip" | awk '{ print $1 }'
+        run: |
+          CHECKSUM=$(md5sum "Jellyfin.Plugin.PeanutButter-${{ env.RELEASE_TAG }}.zip" | awk '{ print $1 }')
+          echo "Release checksum: ${CHECKSUM}"
+          echo "RELEASE_CHECKSUM=${CHECKSUM}" >> "$GITHUB_ENV"
+
+      - name: Update release manifest
+        if: ${{ inputs.prerelease != true }}
+        shell: bash
+        run: |
+          ASSET="Jellyfin.Plugin.PeanutButter-${RELEASE_TAG}.zip"
+          SOURCE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${ASSET}"
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          python .github/scripts/update-manifest.py \
+            --manifest manifest.json \
+            --version "${NEW_VERSION}" \
+            --target-abi "12.0.0.0" \
+            --source-url "$SOURCE_URL" \
+            --checksum "${RELEASE_CHECKSUM}" \
+            --timestamp "$TIMESTAMP" \
+            --replace-version \
+            --changelog "- See the full changelog at [GitHub](https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG})"
 
       - name: Commit updated Directory.Build.props
         if: ${{ inputs.prerelease != true }}
@@ -131,6 +166,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Directory.Build.props
+          git add Directory.Build.props manifest.json
           git commit -m "Increment patch version to ${{ env.NEW_VERSION }}"
           git push
