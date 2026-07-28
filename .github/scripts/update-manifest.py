@@ -9,6 +9,16 @@ from pathlib import Path
 
 
 PLUGIN_GUID = "d6f8f4f2-65c9-4ebc-a3a8-4b5b7b0e6f59"
+PLUGIN_METADATA = {
+    "guid": PLUGIN_GUID,
+    "name": "Peanut Butter",
+    "overview": "Install and update Jellyfin plugins from ZIP files or DLLs over the network.",
+    "description": "Provides an administrator-only, staged installer for verified Jellyfin plugin ZIP archives and standalone DLLs.",
+    "owner": "Peanut Butter",
+    "category": "General",
+    "imageUrl": "https://raw.githubusercontent.com/intro-skipper/peanutbutter/main/images/logo.png",
+    "versions": [],
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -46,7 +56,9 @@ def main() -> None:
         None,
     )
     if plugin is None:
-        raise SystemExit(f"Plugin {PLUGIN_GUID} was not found in {args.manifest}")
+        plugin = dict(PLUGIN_METADATA)
+        plugin["versions"] = []
+        manifest.append(plugin)
 
     versions = plugin.setdefault("versions", [])
     if not isinstance(versions, list):
