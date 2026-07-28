@@ -6,6 +6,7 @@
         "description": "Provides an administrator-only, staged installer for verified Jellyfin plugin ZIP archives and standalone DLLs.",
         "owner": "Peanut Butter",
         "category": "Administration",
+        "imageUrl": "https://raw.githubusercontent.com/intro-skipper/peanutbutter/main/images/logo.png",
         "versions": []
     }
 ]

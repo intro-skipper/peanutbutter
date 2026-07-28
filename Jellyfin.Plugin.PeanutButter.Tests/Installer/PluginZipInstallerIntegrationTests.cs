@@ -267,7 +267,7 @@ public sealed class PluginZipInstallerIntegrationTests : IDisposable
         Assert.Equal("Installed", result.Action);
         Assert.Equal(PluginZipBuilder.PluginDllVersion, result.Version);
         Assert.EndsWith(
-            $"Jellyfin.Plugin.PeanutButter_{PluginZipBuilder.PluginDllVersion}",
+            $"{Path.GetFileNameWithoutExtension(PluginZipBuilder.PluginDllName)}_{PluginZipBuilder.PluginDllVersion}",
             result.Directory,
             StringComparison.Ordinal);
         Assert.True(File.Exists(Path.Combine(result.Directory, PluginZipBuilder.PluginDllName)));
