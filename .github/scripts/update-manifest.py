@@ -14,7 +14,7 @@ PLUGIN_METADATA = {
     "name": "Peanut Butter",
     "overview": "Install and update Jellyfin plugins from ZIP files or DLLs over the network.",
     "description": "Provides an administrator-only, staged installer for verified Jellyfin plugin ZIP archives and standalone DLLs.",
-    "owner": "Peanut Butter",
+    "owner": "Intro Skipper",
     "category": "General",
     "imageUrl": "https://raw.githubusercontent.com/intro-skipper/peanutbutter/main/images/logo.png",
     "versions": [],
