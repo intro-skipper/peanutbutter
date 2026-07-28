@@ -15,16 +15,36 @@ public sealed class PluginZipInstallerIntegrationTests : IDisposable
     private static readonly Guid _pluginGuid = Guid.Parse("99999999-8888-7777-6666-555555555555");
 
     private readonly TempDirectory _pluginsDirectory = new();
+    private readonly TempDirectory _stagingDirectory = new();
     private readonly PluginZipInstaller _installer;
 
     public PluginZipInstallerIntegrationTests()
     {
         _installer = new PluginZipInstaller(
             _pluginsDirectory.Path,
+            Path.Combine(_stagingDirectory.Path, "staging"),
             NullLogger<PluginZipInstaller>.Instance);
     }
 
-    public void Dispose() => _pluginsDirectory.Dispose();
+    public void Dispose()
+    {
+        _pluginsDirectory.Dispose();
+        _stagingDirectory.Dispose();
+    }
+
+    [Fact]
+    public void Constructor_StagingInsidePluginsDirectory_Throws()
+    {
+        // Jellyfin's plugin discovery enumerates every top-level folder under the plugin directory and
+        // searches it recursively for DLLs, so a staging folder kept inside it is loaded as a bogus plugin
+        // as soon as a backup or a partial upload is left behind.
+        var exception = Assert.Throws<ArgumentException>(() => new PluginZipInstaller(
+            _pluginsDirectory.Path,
+            Path.Combine(_pluginsDirectory.Path, ".plugin-installer-staging"),
+            NullLogger<PluginZipInstaller>.Instance));
+
+        Assert.Equal("stagingPath", exception.ParamName);
+    }
 
     [Fact]
     public async Task InstallAsync_StandardPluginZip_InstallsIntoVersionedFolder()
@@ -337,10 +357,14 @@ public sealed class PluginZipInstallerIntegrationTests : IDisposable
 
     private void AssertStagingIsClean()
     {
-        var staging = Path.Combine(_pluginsDirectory.Path, ".plugin-installer-staging");
+        var staging = Path.Combine(_stagingDirectory.Path, "staging");
         if (Directory.Exists(staging))
         {
             Assert.Empty(Directory.EnumerateFileSystemEntries(staging));
         }
+
+        Assert.DoesNotContain(
+            Directory.EnumerateDirectories(_pluginsDirectory.Path),
+            directory => Path.GetFileName(directory).StartsWith('.'));
     }
 }

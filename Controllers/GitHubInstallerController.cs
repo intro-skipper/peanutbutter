@@ -44,6 +44,7 @@ public sealed partial class GitHubInstallerController : ControllerBase
         _applicationHost = applicationHost;
         _installer = new PluginZipInstaller(
             applicationPaths.PluginsPath,
+            Path.Combine(applicationPaths.TempDirectory, "peanutbutter-installer-staging"),
             loggerFactory.CreateLogger<PluginZipInstaller>());
         _downloadDirectory = Path.Combine(applicationPaths.TempDirectory, "peanutbutter");
     }
