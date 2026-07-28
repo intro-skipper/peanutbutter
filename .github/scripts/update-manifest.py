@@ -35,6 +35,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Replace an existing entry with the same version instead of retaining it.",
     )
+    parser.add_argument(
+        "--latest-only",
+        action="store_true",
+        help="Retain only the entry being written, for manifests such as beta feeds.",
+    )
     return parser.parse_args()
 
 
@@ -74,7 +79,9 @@ def main() -> None:
         "timestamp": timestamp,
     }
 
-    if args.replace_version:
+    if args.latest_only:
+        versions.clear()
+    elif args.replace_version:
         versions[:] = [item for item in versions if item.get("version") != args.version]
     else:
         versions[:] = [item for item in versions if item.get("sourceUrl") != args.source_url]

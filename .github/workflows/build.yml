@@ -134,6 +134,7 @@ jobs:
             --source-url "$SOURCE_URL" \
             --checksum "$CHECKSUM" \
             --timestamp "$TIMESTAMP" \
+            --latest-only \
             --changelog "- See the commit [${GITHUB_SHA:0:7}](https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA})"
 
       - name: Commit beta manifest
