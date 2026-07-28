@@ -1,6 +1,14 @@
 # Peanut Butter
 
-Peanut Butter and Jellyfin. It couldn't be more obvious.
+
+<div align="center">
+    <p>
+        <img alt="Plugin Banner" src="https://raw.githubusercontent.com/intro-skipper/peanutbutter/main/images/logo.png" />
+    </p>
+    <p>
+        Peanut Butter and Jellyfin. All the flavor with no allergy risk.
+    </p>
+</div>
 
 Peanut Butter is a Jellyfin 12 plugin installer for administrators. It installs or updates plugins from ZIP archives and managed DLL files through the Jellyfin dashboard or API, and can fetch those files directly from GitHub releases.
 
