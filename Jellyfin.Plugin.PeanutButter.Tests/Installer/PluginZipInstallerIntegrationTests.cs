@@ -140,6 +140,44 @@ public sealed class PluginZipInstallerIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task InstallAsync_SameVersion_DllOnlyZip_NestedExistingPackage_ReplacesNestedAssembly()
+    {
+        var existing = Path.Combine(_pluginsDirectory.Path, "Test Plugin_1.2.3.4", "package");
+        Directory.CreateDirectory(existing);
+        await File.WriteAllBytesAsync(
+            Path.Combine(existing, "meta.json"),
+            PluginZipBuilder.MetaJson(_pluginGuid, "Test Plugin", "1.2.3.4"),
+            TestContext.Current.CancellationToken);
+        await File.WriteAllBytesAsync(
+            Path.Combine(existing, PluginZipBuilder.PluginDllName),
+            PluginZipBuilder.PluginDllBytes,
+            TestContext.Current.CancellationToken);
+        using var zip = PluginZipBuilder.Build((PluginZipBuilder.PluginDllName, PluginZipBuilder.PluginDllBytes));
+
+        var result = await _installer.InstallAsync(
+            zip,
+            "github-build.zip",
+            zip.Length,
+            confirmOlderVersion: false,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("Updated", result.Action);
+        Assert.Equal(Path.Combine(_pluginsDirectory.Path, "Test Plugin_1.2.3.4"), result.Directory);
+        Assert.True(File.Exists(Path.Combine(result.Directory, "package", PluginZipBuilder.PluginDllName)));
+        Assert.False(File.Exists(Path.Combine(result.Directory, PluginZipBuilder.PluginDllName)));
+        var pluginAssemblies = Directory.EnumerateFiles(
+            result.Directory,
+            PluginZipBuilder.PluginDllName,
+            SearchOption.AllDirectories);
+        Assert.Single(pluginAssemblies);
+        var metadata = await File.ReadAllTextAsync(
+            Path.Combine(result.Directory, "meta.json"),
+            TestContext.Current.CancellationToken);
+        Assert.Contains($"package/{PluginZipBuilder.PluginDllName}", metadata, StringComparison.Ordinal);
+        AssertStagingIsClean();
+    }
+
+    [Fact]
     public async Task InstallAsync_OlderVersionWithoutConfirmation_ThrowsDowngrade()
     {
         SeedInstalledPlugin("Test Plugin_2.0.0.0", "2.0.0.0");

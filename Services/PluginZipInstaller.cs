@@ -717,50 +717,111 @@ public sealed partial class PluginZipInstaller
             return;
         }
 
-        var existingMetadataPath = Path.Combine(existingPath, "meta.json");
+        var existingMetadataPath = Directory.EnumerateFiles(existingPath, "meta.json", SearchOption.AllDirectories)
+            .FirstOrDefault();
+        var existingAssemblyPath = Directory.EnumerateFiles(existingPath, "*.dll", SearchOption.AllDirectories)
+            .FirstOrDefault(path => IsAssemblyMatch(path, archiveInfo.AssemblyName));
+        var existingMetadataDirectory = existingMetadataPath is null
+            ? string.Empty
+            : Path.GetDirectoryName(Path.GetRelativePath(
+                existingPath,
+                existingMetadataPath))?.Replace(Path.DirectorySeparatorChar, '/') ?? string.Empty;
+        var desiredAssemblyPath = existingAssemblyPath is null
+            ? archiveInfo.AssemblyFileName
+            : Path.GetRelativePath(existingPath, existingAssemblyPath)
+                .Replace(Path.DirectorySeparatorChar, '/');
         var destinationMetadataPath = Path.Combine(extractedPath, "meta.json");
-        if (File.Exists(existingMetadataPath))
+        JsonObject metadataObject;
+        if (existingMetadataPath is not null)
         {
             try
             {
-                var metadata = JsonNode.Parse(File.ReadAllBytes(existingMetadataPath));
-                if (metadata is JsonObject metadataObject)
-                {
-                    // A raw workflow artifact has no manifest. Keep the official install's
-                    // identity/ABI/assembly metadata, but make the manifest describe the
-                    // assembly being uploaded so Jellyfin does not discard the replacement.
-                    metadataObject["version"] = archiveInfo.Version;
-                    if (metadataObject["assemblies"] is not JsonArray assemblies)
-                    {
-                        assemblies = new JsonArray();
-                        metadataObject["assemblies"] = assemblies;
-                    }
-
-                    if (!assemblies.Any(node => node is JsonValue value
-                        && value.TryGetValue<string>(out var assemblyFileName)
-                        && string.Equals(
-                            assemblyFileName,
-                            archiveInfo.AssemblyFileName,
-                            StringComparison.OrdinalIgnoreCase)))
-                    {
-                        assemblies.Add(archiveInfo.AssemblyFileName);
-                    }
-
-                    File.WriteAllText(
-                        destinationMetadataPath,
-                        metadataObject.ToJsonString(_metadataJsonOptions));
-                }
-                else
-                {
-                    File.Copy(existingMetadataPath, destinationMetadataPath, overwrite: false);
-                }
+                metadataObject = JsonNode.Parse(File.ReadAllBytes(existingMetadataPath)) as JsonObject
+                    ?? new JsonObject();
             }
             catch (JsonException)
             {
-                // Preserve the original file below. ReadArchiveInfo already validates any
-                // metadata supplied by the new archive; this is only a compatibility fallback.
-                File.Copy(existingMetadataPath, destinationMetadataPath, overwrite: false);
+                metadataObject = new JsonObject();
             }
+        }
+        else
+        {
+            metadataObject = new JsonObject();
+        }
+
+        // A raw workflow artifact has no manifest. Keep the official install's identity and
+        // supporting metadata, but make the root manifest point at the replacement assembly.
+        // This is important when an existing Jellyfin package has its files under a nested
+        // directory: Jellyfin only reads meta.json from the plugin root, and otherwise may
+        // discover both the old nested DLL and the new uploaded DLL.
+        metadataObject["name"] ??= archiveInfo.Name;
+        metadataObject["version"] = archiveInfo.Version;
+        if (archiveInfo.PluginId.HasValue && metadataObject["guid"] is null && metadataObject["id"] is null)
+        {
+            metadataObject["guid"] = archiveInfo.PluginId.Value.ToString();
+        }
+
+        var assemblies = metadataObject["assemblies"] as JsonArray ?? new JsonArray();
+        var replacementListed = false;
+        for (var index = 0; index < assemblies.Count; index++)
+        {
+            if (assemblies[index] is not JsonValue value
+                || !value.TryGetValue<string>(out var assemblyPath)
+                || string.IsNullOrWhiteSpace(assemblyPath))
+            {
+                continue;
+            }
+
+            var rootAssemblyPath = ToRootRelativePath(existingMetadataDirectory, assemblyPath);
+            if (string.Equals(
+                    Path.GetFileName(rootAssemblyPath),
+                    archiveInfo.AssemblyFileName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                assemblies[index] = desiredAssemblyPath;
+                replacementListed = true;
+            }
+            else if (!string.Equals(rootAssemblyPath, assemblyPath, StringComparison.Ordinal))
+            {
+                assemblies[index] = rootAssemblyPath;
+            }
+        }
+
+        if (!replacementListed)
+        {
+            assemblies.Add(desiredAssemblyPath);
+        }
+
+        metadataObject["assemblies"] = assemblies;
+        File.WriteAllText(
+            destinationMetadataPath,
+            metadataObject.ToJsonString(_metadataJsonOptions));
+
+        var stagedAssemblyPath = Directory.EnumerateFiles(extractedPath, "*.dll", SearchOption.AllDirectories)
+            .FirstOrDefault(path => string.Equals(
+                Path.GetFileName(path),
+                archiveInfo.AssemblyFileName,
+                StringComparison.OrdinalIgnoreCase));
+        if (stagedAssemblyPath is null)
+        {
+            throw new PluginArchiveException(
+                $"The staged plugin assembly '{archiveInfo.AssemblyFileName}' was not found.");
+        }
+
+        var desiredStagedAssemblyPath = Path.GetFullPath(Path.Combine(
+            extractedPath,
+            desiredAssemblyPath.Replace('/', Path.DirectorySeparatorChar)));
+        EnsureWithinDirectory(extractedPath, desiredStagedAssemblyPath);
+        if (!string.Equals(stagedAssemblyPath, desiredStagedAssemblyPath, StringComparison.OrdinalIgnoreCase))
+        {
+            var desiredAssemblyDirectory = Path.GetDirectoryName(desiredStagedAssemblyPath);
+            if (desiredAssemblyDirectory is null)
+            {
+                throw new PluginArchiveException("The staged plugin assembly has no valid destination directory.");
+            }
+
+            Directory.CreateDirectory(desiredAssemblyDirectory);
+            File.Move(stagedAssemblyPath, desiredStagedAssemblyPath);
         }
 
         // Build workflow artifacts commonly contain only the plugin DLL. Keep the
@@ -770,12 +831,8 @@ public sealed partial class PluginZipInstaller
         {
             var relativePath = Path.GetRelativePath(existingPath, existingFile);
             if ((File.GetAttributes(existingFile) & FileAttributes.ReparsePoint) != 0
-                || Path.GetFileName(existingFile).Equals(
-                    archiveInfo.AssemblyFileName,
-                    StringComparison.OrdinalIgnoreCase)
-                || Path.GetFileNameWithoutExtension(existingFile).Equals(
-                    archiveInfo.AssemblyName,
-                    StringComparison.OrdinalIgnoreCase))
+                || (existingFile.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+                    && IsAssemblyMatch(existingFile, archiveInfo.AssemblyName)))
             {
                 continue;
             }
@@ -796,6 +853,28 @@ public sealed partial class PluginZipInstaller
             Directory.CreateDirectory(destinationDirectory);
             File.Copy(existingFile, destinationPath);
         }
+    }
+
+    private static string ToRootRelativePath(string metadataDirectory, string assemblyPath)
+    {
+        var normalizedAssemblyPath = assemblyPath.Replace('\\', '/');
+        if (string.IsNullOrWhiteSpace(normalizedAssemblyPath)
+            || normalizedAssemblyPath.StartsWith('/')
+            || normalizedAssemblyPath.Contains(':', StringComparison.Ordinal))
+        {
+            throw new PluginArchiveException("The installed plugin metadata contains an invalid assembly path.");
+        }
+
+        var combined = string.IsNullOrEmpty(metadataDirectory)
+            ? normalizedAssemblyPath
+            : $"{metadataDirectory.TrimEnd('/')}/{normalizedAssemblyPath.TrimStart('/')}";
+        var segments = combined.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Any(segment => segment is "." or ".."))
+        {
+            throw new PluginArchiveException("The installed plugin metadata contains an unsafe assembly path.");
+        }
+
+        return string.Join('/', segments);
     }
 
     private void EnsureSafePluginPath(string path)
