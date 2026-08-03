@@ -111,6 +111,35 @@ public sealed class PluginZipInstallerIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task InstallAsync_SameVersion_NestedExistingPackage_IsReplaced()
+    {
+        var existing = Path.Combine(_pluginsDirectory.Path, "Test Plugin_1.2.3.4", "package");
+        Directory.CreateDirectory(existing);
+        await File.WriteAllBytesAsync(
+            Path.Combine(existing, "meta.json"),
+            PluginZipBuilder.MetaJson(_pluginGuid, "Test Plugin", "1.2.3.4"),
+            TestContext.Current.CancellationToken);
+        await File.WriteAllBytesAsync(
+            Path.Combine(existing, PluginZipBuilder.PluginDllName),
+            PluginZipBuilder.PluginDllBytes,
+            TestContext.Current.CancellationToken);
+        using var zip = PluginZipBuilder.BuildPluginZip(_pluginGuid, "Test Plugin", "1.2.3.4");
+
+        var result = await _installer.InstallAsync(
+            zip,
+            "github-plugin.zip",
+            zip.Length,
+            confirmOlderVersion: false,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("Updated", result.Action);
+        Assert.Equal(Path.Combine(_pluginsDirectory.Path, "Test Plugin_1.2.3.4"), result.Directory);
+        Assert.True(File.Exists(Path.Combine(result.Directory, "meta.json")));
+        Assert.False(Directory.Exists(Path.Combine(result.Directory, "package")));
+        AssertStagingIsClean();
+    }
+
+    [Fact]
     public async Task InstallAsync_OlderVersionWithoutConfirmation_ThrowsDowngrade()
     {
         SeedInstalledPlugin("Test Plugin_2.0.0.0", "2.0.0.0");

@@ -587,7 +587,7 @@ public sealed partial class PluginZipInstaller
 
             var matched = false;
             var version = string.Empty;
-            var metadataPath = Directory.EnumerateFiles(directory, "meta.json", SearchOption.TopDirectoryOnly)
+            var metadataPath = Directory.EnumerateFiles(directory, "meta.json", SearchOption.AllDirectories)
                 .FirstOrDefault();
             if (metadataPath is not null)
             {
@@ -614,12 +614,14 @@ public sealed partial class PluginZipInstaller
                 }
             }
 
-            if (string.Equals(directoryName, archiveInfo.FolderName, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(directoryName, archiveInfo.FolderName, StringComparison.OrdinalIgnoreCase)
+                || (IsMatchingVersionedFolder(directoryName, archiveInfo)
+                    && Directory.EnumerateFiles(directory, "*.dll", SearchOption.AllDirectories).Any()))
             {
                 matched = true;
             }
 
-            if (Directory.EnumerateFiles(directory, "*.dll", SearchOption.TopDirectoryOnly)
+            if (Directory.EnumerateFiles(directory, "*.dll", SearchOption.AllDirectories)
                 .Any(path => IsAssemblyMatch(path, archiveInfo.AssemblyName)))
             {
                 matched = true;
@@ -634,6 +636,14 @@ public sealed partial class PluginZipInstaller
         return matches
             .OrderByDescending(match => match.Version)
             .FirstOrDefault();
+    }
+
+    private static bool IsMatchingVersionedFolder(string directoryName, PluginArchiveInfo archiveInfo)
+    {
+        var prefix = archiveInfo.FolderName + "_";
+        return directoryName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            && Version.TryParse(directoryName[prefix.Length..], out var folderVersion)
+            && CompareVersions(archiveInfo.Version, folderVersion) == 0;
     }
 
     internal static Version ParsePluginVersion(string metadataVersion, string directoryName)
