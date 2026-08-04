@@ -142,11 +142,12 @@ public sealed class PluginZipInstallerIntegrationTests : IDisposable
     [Fact]
     public async Task InstallAsync_SameVersion_DllOnlyZip_NestedExistingPackage_ReplacesNestedAssembly()
     {
-        var existing = Path.Combine(_pluginsDirectory.Path, "Test Plugin_1.2.3.4", "package");
+        var version = PluginZipBuilder.PluginDllVersion;
+        var existing = Path.Combine(_pluginsDirectory.Path, $"Test Plugin_{version}", "package");
         Directory.CreateDirectory(existing);
         await File.WriteAllBytesAsync(
             Path.Combine(existing, "meta.json"),
-            PluginZipBuilder.MetaJson(_pluginGuid, "Test Plugin", "1.2.3.4"),
+            PluginZipBuilder.MetaJson(_pluginGuid, "Test Plugin", version),
             TestContext.Current.CancellationToken);
         await File.WriteAllBytesAsync(
             Path.Combine(existing, PluginZipBuilder.PluginDllName),
@@ -162,7 +163,7 @@ public sealed class PluginZipInstallerIntegrationTests : IDisposable
             TestContext.Current.CancellationToken);
 
         Assert.Equal("Updated", result.Action);
-        Assert.Equal(Path.Combine(_pluginsDirectory.Path, "Test Plugin_1.2.3.4"), result.Directory);
+        Assert.Equal(Path.Combine(_pluginsDirectory.Path, $"Test Plugin_{version}"), result.Directory);
         Assert.True(File.Exists(Path.Combine(result.Directory, "package", PluginZipBuilder.PluginDllName)));
         Assert.False(File.Exists(Path.Combine(result.Directory, PluginZipBuilder.PluginDllName)));
         var pluginAssemblies = Directory.EnumerateFiles(
