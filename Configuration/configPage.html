@@ -582,14 +582,22 @@
                 function resetRestartAction(action, button, status) {
                     action.hidden = true;
                     button.disabled = false;
+                    button.hidden = false;
+                    action.querySelector('strong').textContent = 'Restart required';
                     status.textContent = 'Restart to load the installed plugin.';
                     status.dataset.state = '';
                 }
 
-                function showRestartAction(action, button, status) {
+                function showRestartAction(action, button, status, fullRestartRequired) {
                     action.hidden = false;
                     button.disabled = false;
-                    status.textContent = 'Restart to load the installed plugin.';
+                    button.hidden = !!fullRestartRequired;
+                    action.querySelector('strong').textContent = fullRestartRequired
+                        ? 'Installation requires a full Jellyfin restart'
+                        : 'Restart required';
+                    status.textContent = fullRestartRequired
+                        ? 'Fully stop and relaunch Jellyfin to finish loading the installation.'
+                        : 'Restart to load the installed plugin.';
                     status.dataset.state = '';
                 }
 
@@ -804,7 +812,11 @@
                         var name = response.Name || response.name || 'plugin';
                         var version = response.Version || response.version || 'unknown version';
                         setResult(action + ' ' + name + ' ' + version + '.', 'success');
-                        showRestartAction(restartAction, restartButton, restartStatus);
+                        showRestartAction(
+                            restartAction,
+                            restartButton,
+                            restartStatus,
+                            !!(response.fullRestartRequired || response.FullRestartRequired));
                         setConfirmation('', false);
                         fileInput.value = '';
                         showFileName();
@@ -1088,7 +1100,11 @@
                         var version = pick(install, 'version') || 'unknown version';
                         var digestNote = pick(response, 'digestVerified') ? ' SHA-256 verified.' : '';
                         setGitHubResult(action + ' ' + name + ' ' + version + '.' + digestNote, 'success');
-                        showRestartAction(githubRestartAction, githubRestartButton, githubRestartStatus);
+                        showRestartAction(
+                            githubRestartAction,
+                            githubRestartButton,
+                            githubRestartStatus,
+                            !!pick(install, 'fullRestartRequired'));
                         setGitHubConfirmation('', false);
                         loadGitHubSources();
                     }).catch(function (error) {

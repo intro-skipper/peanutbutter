@@ -62,6 +62,7 @@ public sealed class PluginZipInstallerIntegrationTests : IDisposable
         Assert.Equal(_pluginGuid, result.PluginId);
         Assert.Equal("1.2.3.4", result.Version);
         Assert.True(result.RestartRequired);
+        Assert.False(result.FullRestartRequired);
         var installedDirectory = Path.Combine(_pluginsDirectory.Path, "Test Plugin_1.2.3.4");
         Assert.Equal(installedDirectory, result.Directory);
         Assert.True(File.Exists(Path.Combine(installedDirectory, PluginZipBuilder.PluginDllName)));
@@ -84,6 +85,7 @@ public sealed class PluginZipInstallerIntegrationTests : IDisposable
 
         Assert.Equal("Updated", result.Action);
         Assert.Equal(Path.Combine(_pluginsDirectory.Path, "Test Plugin_2.0.0.0"), result.Directory);
+        Assert.False(result.FullRestartRequired);
         Assert.True(Directory.Exists(existing), "the previous versioned folder must remain for Jellyfin's version selection");
         AssertStagingIsClean();
     }
@@ -105,6 +107,7 @@ public sealed class PluginZipInstallerIntegrationTests : IDisposable
 
         Assert.Equal("Updated", result.Action);
         Assert.Equal(existing, result.Directory);
+        Assert.True(result.FullRestartRequired);
         Assert.False(File.Exists(marker), "a complete package replaces the folder content");
         Assert.True(File.Exists(Path.Combine(existing, PluginZipBuilder.PluginDllName)));
         AssertStagingIsClean();
@@ -164,6 +167,7 @@ public sealed class PluginZipInstallerIntegrationTests : IDisposable
 
         Assert.Equal("Updated", result.Action);
         Assert.Equal(Path.Combine(_pluginsDirectory.Path, $"Test Plugin_{version}"), result.Directory);
+        Assert.True(result.FullRestartRequired);
         Assert.True(File.Exists(Path.Combine(result.Directory, "package", PluginZipBuilder.PluginDllName)));
         Assert.False(File.Exists(Path.Combine(result.Directory, PluginZipBuilder.PluginDllName)));
         var pluginAssemblies = Directory.EnumerateFiles(

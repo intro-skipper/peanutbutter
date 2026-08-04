@@ -144,6 +144,7 @@ public sealed partial class PluginZipInstaller
 
             PrepareManifestlessUpdate(extractedPath, existingDirectory?.FullPath, archiveInfo);
             var replaceExistingDirectory = existingDirectory is not null && versionComparison <= 0;
+            var requiresFullRestart = existingDirectory is not null && versionComparison == 0;
             targetPath = replaceExistingDirectory
                 ? existingDirectory!.FullPath
                 : Path.Combine(_pluginsPath, BuildVersionedFolderName(archiveInfo));
@@ -189,7 +190,8 @@ public sealed partial class PluginZipInstaller
                 PluginId = archiveInfo.PluginId,
                 Version = archiveInfo.Version,
                 Directory = targetPath,
-                RestartRequired = true
+                RestartRequired = true,
+                FullRestartRequired = requiresFullRestart
             };
         }
         catch (PluginArchiveException)
@@ -321,6 +323,7 @@ public sealed partial class PluginZipInstaller
 
             PrepareManifestlessUpdate(extractedPath, existingDirectory?.FullPath, archiveInfo);
             var replaceExistingDirectory = existingDirectory is not null && versionComparison <= 0;
+            var requiresFullRestart = existingDirectory is not null && versionComparison == 0;
             targetPath = replaceExistingDirectory
                 ? existingDirectory!.FullPath
                 : Path.Combine(_pluginsPath, BuildVersionedFolderName(archiveInfo));
@@ -360,7 +363,8 @@ public sealed partial class PluginZipInstaller
                 Name = archiveInfo.Name,
                 Version = archiveInfo.Version,
                 Directory = targetPath,
-                RestartRequired = true
+                RestartRequired = true,
+                FullRestartRequired = requiresFullRestart
             };
         }
         catch (PluginArchiveException)
@@ -1280,6 +1284,12 @@ public sealed class PluginInstallResult
 
     /// <summary>Gets a value indicating whether Jellyfin must restart.</summary>
     public bool RestartRequired { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether a full Jellyfin process restart is required to load a
+    /// replacement installed over the same plugin version.
+    /// </summary>
+    public bool FullRestartRequired { get; init; }
 }
 
 /// <summary>
